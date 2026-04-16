@@ -647,7 +647,6 @@ const venues = [
   },
 ];
 
-const fallbackImage = "https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=1100&q=82";
 const publicSiteUrl = "https://melasuda.github.io/barcrawlr/";
 
 const form = document.querySelector("#crawl-form");
@@ -783,7 +782,6 @@ function buildPlan(answers) {
     day,
     endHour: scheduled.length ? scheduled[scheduled.length - 1].endHour : startHour + answers.duration,
     routeName: routeNameFor(answers, scheduled),
-    backup: backupFor(answers, scheduled, day),
   };
 }
 
@@ -891,6 +889,7 @@ function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
 }
 
 function renderPlan(plan, answers, options = {}) {
+  answers = sanitizeAnswers({ vibes: [], excludedBars: [], removedBars: [], ...answers });
   setRouteExclusions(answers.excludedBars);
   setRouteRemovals(answers.removedBars);
   emptyState.hidden = true;
@@ -922,7 +921,7 @@ function renderPlan(plan, answers, options = {}) {
           <div class="stat"><b>${formatHour(plan.endHour)}</b><span>Wrap time</span></div>
         </div>
       </div>
-      <img src="${fallbackImage}" alt="Cocktails on a bar counter" />
+      <div class="route-emoji" aria-hidden="true">${emojiForPlan(answers)}</div>
     </article>
 
     <div class="summary-row">
@@ -953,13 +952,7 @@ function renderPlan(plan, answers, options = {}) {
     <div class="venue-list">
       ${plan.stops.map((stop, index) => renderStop(stop, index, plan.stops[index - 1], answers)).join("")}
     </div>
-
-    <article class="backup-box">
-      <p class="eyebrow">Plan B</p>
-      <h3>${escapeHtml(plan.backup.title)}</h3>
-      <p>${escapeHtml(plan.backup.copy)}</p>
-      ${warnings.length ? `<div class="warning">${escapeHtml(warnings.join(" "))}</div>` : ""}
-    </article>
+    ${warnings.length ? `<div class="warning">${escapeHtml(warnings.join(" "))}</div>` : ""}
   `;
 
   if (options.scroll !== false) {
@@ -1288,20 +1281,6 @@ function shouldWarn(venue, answers) {
   return answers.reservations && ((venue.needsBooking && answers.groupSize > 4) || (venue.smallGroup && answers.groupSize > 4));
 }
 
-function backupFor(answers, stops, day) {
-  const backup = venues.find((venue) => !stops.some((stop) => stop.venue === venue) && closesAfter(venue, day, 25));
-  if (backup) {
-    return {
-      title: `${backup.name} is your safety valve`,
-      copy: `${backup.vibe} Save it if a queue, rain, or group wobble changes the route. ${backup.note}`,
-    };
-  }
-  return {
-    title: "Keep one short hop in reserve",
-    copy: "Amsterdam nights are compact. If the group loses steam, skip the furthest stop and end where the room feels best.",
-  };
-}
-
 function makeVibeLine(answers, plan) {
   const starts = `${formatHour(timeToHour(answers.startTime))} start`;
   const hasMusic = answers.vibes.includes("live-music");
@@ -1349,6 +1328,16 @@ function makeVibeLine(answers, plan) {
     title: "A friendly Amsterdam crawl without overthinking it.",
     copy: `The route favors open venues, sensible walking, and stops that can handle a group of ${answers.groupSize}.`,
   };
+}
+
+function emojiForPlan(answers) {
+  if (answers.vibes.includes("games")) return "🎱🎳🎯";
+  if (answers.vibes.includes("live-music")) return "🍻🎷🎶";
+  if (answers.vibes.includes("chill-beers") || answers.vibes.includes("craft-beer")) return "🍺🍻🚶";
+  if (answers.vibes.includes("terrace")) return "🍹🌤️🪑";
+  if (answers.vibes.includes("late-night")) return "🍸🌙✨";
+  if (answers.vibes.includes("cocktails")) return "🍸🍋🧊";
+  return "🍻🗺️🚶";
 }
 
 function routeNameFor(answers, stops) {
