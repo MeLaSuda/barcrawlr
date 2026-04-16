@@ -323,7 +323,7 @@ button.secondary-action {
 .results {
   display: grid;
   gap: 18px;
-  padding: 18px;
+  padding: 0;
 }
 
 .route-hero {
@@ -660,8 +660,7 @@ button.secondary-action {
     flex: 1 1 130px;
   }
 
-  .question-panel,
-  .results {
+  .question-panel {
     padding: 14px;
   }
 
