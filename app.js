@@ -719,6 +719,7 @@ function buildPlan(answers) {
       const openScore = openScoreForVenue(venue, day, startHour, effectiveDuration);
       const tagScore = answers.vibes.reduce((score, vibe) => score + (venue.tags.includes(vibe) ? 7 : 0), 0);
       const gameScore = answers.vibes.includes("games") && venue.tags.includes("games") ? 8 : 0;
+      const chillBeerScore = chillBeerFit(venue, answers);
       const moodScore = venue.moods.includes(answers.groupMood) ? 4 : 0;
       const areaScore = answers.area === "any" ? 4 : venue.area === answers.area ? 12 : -8;
       const priceGap = Math.abs(budgetRank[venue.price] - budgetRank[answers.budget]);
@@ -727,7 +728,7 @@ function buildPlan(answers) {
       const lateScore = answers.vibes.includes("late-night") && closesAfter(venue, day, 25.5) ? 4 : 0;
       return {
         venue,
-        score: openScore + tagScore + gameScore + moodScore + areaScore + priceScore + sizeScore + lateScore,
+        score: openScore + tagScore + gameScore + chillBeerScore + moodScore + areaScore + priceScore + sizeScore + lateScore,
       };
     })
     .filter((item) => item.score > -20)
@@ -1014,7 +1015,7 @@ function sanitizeAnswers(answers) {
   const allowed = {
     duration: ["3", "4", "5", "6", "all-night"],
     groupMood: ["friends", "date", "work", "visitors"],
-    vibes: ["cocktails", "craft-beer", "live-music", "terrace", "hidden", "late-night", "games"],
+    vibes: ["cocktails", "craft-beer", "chill-beers", "live-music", "terrace", "hidden", "late-night", "games"],
     area: ["any", "Centrum", "Jordaan", "Leidseplein", "De Pijp", "Oud-West", "Westerpark", "Noord", "Oost"],
     budget: ["low", "medium", "high"],
     pace: ["relaxed", "balanced", "lively"],
@@ -1082,6 +1083,21 @@ function warningFor(stop, answers) {
   return "";
 }
 
+function chillBeerFit(venue, answers) {
+  if (!answers.vibes.includes("chill-beers")) return 0;
+
+  let score = 0;
+  if (venue.tags.includes("craft-beer")) score += 8;
+  if (venue.tags.includes("terrace")) score += 4;
+  if (venue.tags.includes("hidden")) score += 2;
+  if (venue.tags.includes("food")) score += 2;
+  if (venue.price === "low" || venue.price === "medium") score += 3;
+  if (venue.tags.includes("cocktails")) score -= 4;
+  if (venue.tags.includes("live-music")) score -= 3;
+  if (venue.tags.includes("games")) score -= 3;
+  return score;
+}
+
 function shouldWarn(venue, answers) {
   return answers.reservations && ((venue.needsBooking && answers.groupSize > 4) || (venue.smallGroup && answers.groupSize > 4));
 }
@@ -1104,8 +1120,16 @@ function makeVibeLine(answers, plan) {
   const starts = `${formatHour(timeToHour(answers.startTime))} start`;
   const hasMusic = answers.vibes.includes("live-music");
   const hasBeer = answers.vibes.includes("craft-beer");
+  const hasChillBeers = answers.vibes.includes("chill-beers");
   const hasCocktails = answers.vibes.includes("cocktails");
   const hasGames = answers.vibes.includes("games");
+
+  if (hasChillBeers) {
+    return {
+      title: "Cold beers, easy rooms, no rush.",
+      copy: `A ${starts}, shorter hops, and casual stops where the group can settle in without turning the night into a performance.`,
+    };
+  }
 
   if (hasGames) {
     return {
@@ -1261,6 +1285,7 @@ function formatDistance(meters) {
 function labelFor(value) {
   return {
     "craft-beer": "Craft beer",
+    "chill-beers": "Chill beers",
     "live-music": "Live music",
     "late-night": "Late night",
     cocktails: "Cocktails",
