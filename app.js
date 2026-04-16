@@ -1559,7 +1559,8 @@ function renderStop(stop, index, previousStop, answers) {
     ${leg}
     <article class="venue-card">
       <div class="time-badge">
-        <div>${formatHour(stop.startHour)}<span>${index + 1}</span></div>
+        <span class="venue-emoji" aria-hidden="true">${emojiForVenue(venue)}</span>
+        <span>${formatHour(stop.startHour)}</span>
       </div>
       <div class="venue-main">
         <div class="venue-top">
@@ -1582,6 +1583,25 @@ function renderStop(stop, index, previousStop, answers) {
       </div>
     </article>
   `;
+}
+
+function emojiForVenue(venue) {
+  const name = venue.name.toLowerCase();
+  if (venue.tags.includes("bowling")) return "🎳";
+  if (name.includes("glowgolf")) return "⛳";
+  if (name.includes("tonton") || name.includes("blast galaxy")) return "🕹️";
+  if (name.includes("poolbar") || name.includes("sportpark")) return "🎱";
+  if (name.includes("molly") || name.includes("mulligans")) return "☘️";
+  if (venue.tags.includes("wine")) return "🍷";
+  if (venue.tags.includes("games")) return "🎯";
+  if (venue.tags.includes("live-music")) return "🎷";
+  if (venue.tags.includes("cocktails")) return "🍸";
+  if (venue.tags.includes("craft-beer")) return "🍺";
+  if (venue.tags.includes("chill-beers")) return "🍻";
+  if (venue.tags.includes("terrace")) return "🌤️";
+  if (venue.tags.includes("hidden")) return "🗝️";
+  if (venue.tags.includes("food")) return "🍽️";
+  return "🍻";
 }
 
 function renderLeg(from, to) {
