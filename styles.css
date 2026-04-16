@@ -43,9 +43,7 @@ select {
 .intro {
   display: block;
   padding: 26px;
-  background:
-    linear-gradient(135deg, rgba(216, 255, 232, 0.86), rgba(255, 209, 102, 0.72)),
-    var(--paper);
+  background: var(--paper);
   border-bottom: 1px solid var(--line);
 }
 
