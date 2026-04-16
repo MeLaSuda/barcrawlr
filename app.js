@@ -657,6 +657,7 @@ const dateInput = document.querySelector("#crawl-date");
 const sourceLinks = document.querySelector("#source-links");
 const includeBarSelect = document.querySelector("#include-bar");
 const excludedBarsInput = document.querySelector("#excluded-bars");
+let routeExclusions = [];
 
 dateInput.value = todayValue();
 renderSourceLinks();
@@ -673,7 +674,7 @@ form.addEventListener("submit", (event) => {
 results.addEventListener("click", async (event) => {
   const clearButton = event.target.closest("[data-clear-excluded]");
   if (clearButton) {
-    excludedBarsInput.value = "";
+    setRouteExclusions([]);
     const answers = readAnswers();
     renderPlan(buildPlan(answers), answers, { syncUrl: true });
     return;
@@ -719,7 +720,7 @@ function readAnswers() {
     walkLimit: Number(data.get("walkLimit") || 1000),
     includeBar: data.get("includeBar") || "",
     includeMode: data.get("includeMode") || "start",
-    excludedBars: readExcludedBars(data.get("excludedBars") || ""),
+    excludedBars: mergedExcludedBars(data.get("excludedBars") || ""),
     reservations: data.get("reservations") === "on",
   });
 }
@@ -878,6 +879,7 @@ function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
 }
 
 function renderPlan(plan, answers, options = {}) {
+  setRouteExclusions(answers.excludedBars);
   emptyState.hidden = true;
   results.hidden = false;
 
@@ -970,7 +972,7 @@ function renderStop(stop, index, previousStop, answers) {
           <h3>${escapeHtml(venue.name)}</h3>
           <div class="venue-actions">
             <a class="venue-link" href="${venue.source.url}" target="_blank" rel="noreferrer">Check venue</a>
-            ${canRemove ? `<button class="text-action" type="button" data-remove-bar="${escapeHtml(venue.name)}">Remove</button>` : ""}
+            ${canRemove ? `<button class="text-action" type="button" data-remove-bar="${escapeHtml(venue.name)}" aria-label="Remove ${escapeHtml(venue.name)} from this route">Remove</button>` : ""}
           </div>
         </div>
         <p>${escapeHtml(venue.vibe)}</p>
@@ -1027,7 +1029,7 @@ function renderExcludedNotice(answers) {
 }
 
 function planCanRemove(answers, venue) {
-  return venue.name !== answers.includeBar || answers.includeMode !== "start";
+  return Boolean(venue.name);
 }
 
 function removeBarFromRoute(name) {
@@ -1039,9 +1041,7 @@ function removeBarFromRoute(name) {
     form.elements.includeBar.value = "";
   }
 
-  const excluded = new Set(answers.excludedBars);
-  excluded.add(venueName);
-  excludedBarsInput.value = Array.from(excluded).join("|");
+  setRouteExclusions([...answers.excludedBars, venueName]);
 
   const nextAnswers = readAnswers();
   renderPlan(buildPlan(nextAnswers), nextAnswers, { syncUrl: true });
@@ -1170,7 +1170,7 @@ function setFormAnswers(answers) {
   form.elements.walkLimit.value = answers.walkLimit;
   form.elements.includeBar.value = answers.includeBar;
   form.elements.includeMode.value = answers.includeMode;
-  form.elements.excludedBars.value = answers.excludedBars.join("|");
+  setRouteExclusions(answers.excludedBars);
   form.elements.reservations.checked = answers.reservations;
 
   form.querySelectorAll('input[name="vibe"]').forEach((input) => {
@@ -1185,6 +1185,15 @@ function readExcludedBars(value) {
     .filter(Boolean)
     .map(validVenueName)
     .filter(Boolean);
+}
+
+function mergedExcludedBars(value) {
+  return Array.from(new Set([...readExcludedBars(value), ...routeExclusions]));
+}
+
+function setRouteExclusions(names) {
+  routeExclusions = Array.from(new Set((names || []).map(validVenueName).filter(Boolean)));
+  excludedBarsInput.value = routeExclusions.join("|");
 }
 
 function validVenueName(name) {
