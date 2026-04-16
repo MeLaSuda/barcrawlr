@@ -56,7 +56,7 @@ select {
   min-height: 250px;
   flex-direction: column;
   justify-content: center;
-  max-width: 850px;
+  max-width: 1100px;
 }
 
 .eyebrow {
@@ -76,14 +76,27 @@ p {
 }
 
 h1 {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.12em;
+  align-items: flex-start;
   margin: 0;
-  font-size: clamp(3.1rem, 13vw, 8.5rem);
+  font-size: clamp(3.1rem, 11vw, 8.5rem);
   line-height: 0.86;
   letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.wordmark {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .title-emoji {
-  display: inline-block;
+  flex: 0 0 auto;
+  margin-top: 0.05em;
+  font-size: 0.58em;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -649,6 +662,10 @@ button.secondary-action {
 
   .intro-copy {
     min-height: 210px;
+  }
+
+  h1 {
+    font-size: clamp(2.45rem, 12vw, 3.1rem);
   }
 
   .question-grid,
