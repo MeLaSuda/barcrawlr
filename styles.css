@@ -312,8 +312,6 @@ button.secondary-action {
   min-height: 320px;
   place-items: center;
   padding: 24px;
-  background: var(--night);
-  color: #ffffff;
   font-size: clamp(4rem, 14vw, 8rem);
   line-height: 1;
 }
@@ -354,9 +352,6 @@ button.secondary-action {
   display: grid;
   min-height: 220px;
   place-items: center;
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--mint);
   font-size: clamp(3.5rem, 10vw, 6.5rem);
   line-height: 1;
 }
