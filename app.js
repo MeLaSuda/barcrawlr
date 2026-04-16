@@ -657,7 +657,9 @@ const dateInput = document.querySelector("#crawl-date");
 const sourceLinks = document.querySelector("#source-links");
 const includeBarSelect = document.querySelector("#include-bar");
 const excludedBarsInput = document.querySelector("#excluded-bars");
+const removedBarsInput = document.querySelector("#removed-bars");
 let routeExclusions = [];
+let routeRemovals = [];
 
 dateInput.value = todayValue();
 renderSourceLinks();
@@ -675,8 +677,15 @@ results.addEventListener("click", async (event) => {
   const clearButton = event.target.closest("[data-clear-excluded]");
   if (clearButton) {
     setRouteExclusions([]);
+    setRouteRemovals([]);
     const answers = readAnswers();
     renderPlan(buildPlan(answers), answers, { syncUrl: true });
+    return;
+  }
+
+  const replaceButton = event.target.closest("[data-replace-bar]");
+  if (replaceButton) {
+    replaceBarInRoute(replaceButton.dataset.replaceBar);
     return;
   }
 
@@ -721,22 +730,25 @@ function readAnswers() {
     includeBar: data.get("includeBar") || "",
     includeMode: data.get("includeMode") || "start",
     excludedBars: mergedExcludedBars(data.get("excludedBars") || ""),
+    removedBars: mergedRemovedBars(data.get("removedBars") || ""),
     reservations: data.get("reservations") === "on",
   });
 }
 
 function buildPlan(answers) {
-  answers = sanitizeAnswers({ vibes: [], excludedBars: [], ...answers });
+  answers = sanitizeAnswers({ vibes: [], excludedBars: [], removedBars: [], ...answers });
   const day = getAmsterdamDay(answers.crawlDate);
   const startHour = timeToHour(answers.startTime);
   const isAllNight = answers.duration === "all-night";
   const effectiveDuration = isAllNight ? Math.max(6, 28 - startHour) : answers.duration;
-  const stopCount = isAllNight ? 6 : answers.pace === "relaxed" ? 3 : answers.pace === "lively" ? 5 : 4;
+  const baseStopCount = isAllNight ? 6 : answers.pace === "relaxed" ? 3 : answers.pace === "lively" ? 5 : 4;
+  const stopCount = Math.max(1, baseStopCount - answers.removedBars.length);
   const stopLength = isAllNight ? 46 : answers.pace === "relaxed" ? 62 : answers.pace === "lively" ? 44 : 52;
   const travelPad = isAllNight || answers.pace === "lively" ? 10 : 14;
   const budgetRank = { low: 1, medium: 2, high: 3 };
 
   const scored = venues
+    .filter((venue) => !answers.removedBars.includes(venue.name))
     .filter((venue) => !answers.excludedBars.includes(venue.name) || venue.name === answers.includeBar)
     .map((venue) => {
       const openScore = openScoreForVenue(venue, day, startHour, effectiveDuration);
@@ -880,6 +892,7 @@ function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
 
 function renderPlan(plan, answers, options = {}) {
   setRouteExclusions(answers.excludedBars);
+  setRouteRemovals(answers.removedBars);
   emptyState.hidden = true;
   results.hidden = false;
 
@@ -959,7 +972,6 @@ function renderStop(stop, index, previousStop, answers) {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.address)}`;
   const leg = previousStop ? renderLeg(previousStop.venue, venue) : "";
   const warning = warningFor(stop, answers);
-  const canRemove = planCanRemove(answers, venue);
 
   return `
     ${leg}
@@ -972,7 +984,8 @@ function renderStop(stop, index, previousStop, answers) {
           <h3>${escapeHtml(venue.name)}</h3>
           <div class="venue-actions">
             <a class="venue-link" href="${venue.source.url}" target="_blank" rel="noreferrer">Check venue</a>
-            ${canRemove ? `<button class="text-action" type="button" data-remove-bar="${escapeHtml(venue.name)}" aria-label="Remove ${escapeHtml(venue.name)} from this route">Remove</button>` : ""}
+            <button class="text-action" type="button" data-replace-bar="${escapeHtml(venue.name)}" aria-label="Replace ${escapeHtml(venue.name)} in this route">Replace</button>
+            <button class="text-action text-action-danger" type="button" data-remove-bar="${escapeHtml(venue.name)}" aria-label="Remove ${escapeHtml(venue.name)} from this route">Remove</button>
           </div>
         </div>
         <p>${escapeHtml(venue.vibe)}</p>
@@ -1019,17 +1032,30 @@ function renderVenueOptions() {
 }
 
 function renderExcludedNotice(answers) {
-  if (!answers.excludedBars.length) return "";
+  if (!answers.excludedBars.length && !answers.removedBars.length) return "";
+  const replacedText = answers.excludedBars.length ? `Replaced: ${answers.excludedBars.map(escapeHtml).join(", ")}` : "";
+  const removedText = answers.removedBars.length ? `Removed: ${answers.removedBars.map(escapeHtml).join(", ")}` : "";
   return `
     <div class="excluded-box">
-      <span>Removed from this route: ${answers.excludedBars.map(escapeHtml).join(", ")}</span>
-      <button class="text-action" type="button" data-clear-excluded>Clear removed bars</button>
+      <span>${[replacedText, removedText].filter(Boolean).join(" · ")}</span>
+      <button class="text-action" type="button" data-clear-excluded>Clear edits</button>
     </div>
   `;
 }
 
-function planCanRemove(answers, venue) {
-  return Boolean(venue.name);
+function replaceBarInRoute(name) {
+  const answers = readAnswers();
+  const venueName = validVenueName(name);
+  if (!venueName) return;
+
+  if (answers.includeBar === venueName) {
+    form.elements.includeBar.value = "";
+  }
+
+  setRouteExclusions([...answers.excludedBars, venueName]);
+
+  const nextAnswers = readAnswers();
+  renderPlan(buildPlan(nextAnswers), nextAnswers, { syncUrl: true });
 }
 
 function removeBarFromRoute(name) {
@@ -1041,7 +1067,8 @@ function removeBarFromRoute(name) {
     form.elements.includeBar.value = "";
   }
 
-  setRouteExclusions([...answers.excludedBars, venueName]);
+  setRouteRemovals([...answers.removedBars, venueName]);
+  setRouteExclusions(answers.excludedBars.filter((bar) => bar !== venueName));
 
   const nextAnswers = readAnswers();
   renderPlan(buildPlan(nextAnswers), nextAnswers, { syncUrl: true });
@@ -1089,6 +1116,7 @@ function buildShareParams(answers) {
   if (answers.includeBar) params.set("include", answers.includeBar);
   if (answers.includeMode !== "start") params.set("includeMode", answers.includeMode);
   if (answers.excludedBars.length) params.set("exclude", answers.excludedBars.join("|"));
+  if (answers.removedBars.length) params.set("remove", answers.removedBars.join("|"));
   return params;
 }
 
@@ -1115,6 +1143,7 @@ function answersFromUrl() {
     includeBar: params.get("include") || "",
     includeMode: params.get("includeMode") || "start",
     excludedBars: readExcludedBars(params.get("exclude") || ""),
+    removedBars: readExcludedBars(params.get("remove") || ""),
     reservations: params.get("reservations") !== "0",
   });
 }
@@ -1139,6 +1168,10 @@ function sanitizeAnswers(answers) {
     .map(validVenueName)
     .filter(Boolean)
     .filter((name) => name !== includeBar);
+  const removedBars = (answers.removedBars || [])
+    .map(validVenueName)
+    .filter(Boolean)
+    .filter((name) => name !== includeBar);
 
   return {
     groupSize: clamp(Number(answers.groupSize || 4), 1, 16),
@@ -1153,7 +1186,8 @@ function sanitizeAnswers(answers) {
     walkLimit: allowed.walkLimit.includes(walkValue) ? Number(walkValue) : 1000,
     includeBar,
     includeMode: allowed.includeMode.includes(answers.includeMode) ? answers.includeMode : "start",
-    excludedBars,
+    excludedBars: excludedBars.filter((name) => !removedBars.includes(name)),
+    removedBars,
     reservations: Boolean(answers.reservations),
   };
 }
@@ -1171,6 +1205,7 @@ function setFormAnswers(answers) {
   form.elements.includeBar.value = answers.includeBar;
   form.elements.includeMode.value = answers.includeMode;
   setRouteExclusions(answers.excludedBars);
+  setRouteRemovals(answers.removedBars);
   form.elements.reservations.checked = answers.reservations;
 
   form.querySelectorAll('input[name="vibe"]').forEach((input) => {
@@ -1194,6 +1229,15 @@ function mergedExcludedBars(value) {
 function setRouteExclusions(names) {
   routeExclusions = Array.from(new Set((names || []).map(validVenueName).filter(Boolean)));
   excludedBarsInput.value = routeExclusions.join("|");
+}
+
+function mergedRemovedBars(value) {
+  return Array.from(new Set([...readExcludedBars(value), ...routeRemovals]));
+}
+
+function setRouteRemovals(names) {
+  routeRemovals = Array.from(new Set((names || []).map(validVenueName).filter(Boolean)));
+  removedBarsInput.value = routeRemovals.join("|");
 }
 
 function validVenueName(name) {

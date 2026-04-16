@@ -461,7 +461,7 @@ button.secondary-action {
 .text-action {
   border: 0;
   padding: 0;
-  color: var(--coral);
+  color: var(--ink);
   background: transparent;
   cursor: pointer;
   font-size: 0.86rem;
@@ -469,6 +469,10 @@ button.secondary-action {
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
+}
+
+.text-action-danger {
+  color: var(--coral);
 }
 
 .venue-card p {
