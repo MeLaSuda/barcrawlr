@@ -171,9 +171,25 @@
         <p>
           Venue details are seeded from public venue pages and Amsterdam guides, then simplified for planning. Always check the live venue page before heading out.
         </p>
-        <div id="source-links" class="source-links"></div>
+        <button id="open-source-dialog" class="secondary-action" type="button">View bars</button>
       </section>
     </main>
+
+    <dialog id="source-dialog" class="source-dialog" aria-labelledby="source-dialog-title">
+      <div class="source-dialog-panel">
+        <div class="source-dialog-header">
+          <div>
+            <p class="eyebrow">Bar list</p>
+            <h2 id="source-dialog-title">Bars BarCrawlr checks</h2>
+          </div>
+          <button id="close-source-dialog" class="text-action" type="button">Close</button>
+        </div>
+        <p class="source-dialog-copy">
+          These are the places currently in the Amsterdam planner. Open a venue page before heading out, because hours and bookings can change.
+        </p>
+        <div id="source-links" class="source-links source-links-popup"></div>
+      </div>
+    </dialog>
 
     <script src="app.js"></script>
   </body>

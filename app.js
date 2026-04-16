@@ -1228,6 +1228,9 @@ const results = document.querySelector("#results");
 const emptyState = document.querySelector("#empty-state");
 const dateInput = document.querySelector("#crawl-date");
 const sourceLinks = document.querySelector("#source-links");
+const sourceDialog = document.querySelector("#source-dialog");
+const openSourceDialogButton = document.querySelector("#open-source-dialog");
+const closeSourceDialogButton = document.querySelector("#close-source-dialog");
 const includeBarSelect = document.querySelector("#include-bar");
 const excludedBarsInput = document.querySelector("#excluded-bars");
 const removedBarsInput = document.querySelector("#removed-bars");
@@ -1238,6 +1241,18 @@ dateInput.value = todayValue();
 renderSourceLinks();
 renderVenueOptions();
 restoreSharedPlan();
+
+openSourceDialogButton.addEventListener("click", () => {
+  sourceDialog.showModal();
+});
+
+closeSourceDialogButton.addEventListener("click", () => {
+  sourceDialog.close();
+});
+
+sourceDialog.addEventListener("click", (event) => {
+  if (event.target === sourceDialog) sourceDialog.close();
+});
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1581,9 +1596,11 @@ function renderLeg(from, to) {
 }
 
 function renderSourceLinks() {
-  const uniqueSources = Array.from(new Map(venues.map((venue) => [venue.source.label, venue.source])).values());
-  sourceLinks.innerHTML = uniqueSources
-    .map((source) => `<a href="${source.url}" target="_blank" rel="noreferrer">${source.label}</a>`)
+  openSourceDialogButton.textContent = `View ${venues.length} bars`;
+  sourceLinks.innerHTML = venues
+    .map((venue) => ({ name: venue.name, url: venue.source.url }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((venue) => `<a href="${venue.url}" target="_blank" rel="noreferrer">${escapeHtml(venue.name)}</a>`)
     .join("");
 }
 
