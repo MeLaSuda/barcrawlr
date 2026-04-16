@@ -495,11 +495,11 @@ const venues = [
     lat: 52.3634,
     lng: 4.8828,
     price: "medium",
-    tags: ["live-music", "late-night"],
+    tags: ["live-music", "late-night", "games"],
     moods: ["friends", "visitors"],
     vibe: "Central live-music bar with nightly bands and a reliable late finish.",
-    bestFor: "A final stop when everyone is ready for volume.",
-    note: "Music schedule changes nightly; it can get packed.",
+    bestFor: "A final stop when everyone is ready for volume, pool, and live bands.",
+    note: "Music schedule changes nightly; it can get packed. Pool tables make it a handy activity stop.",
     hours: allDays([[12, 27]], { 5: [[12.5, 28]], 6: [[12.5, 28]] }),
     source: { label: "The Waterhole", url: "https://waterhole.nl/contact/" },
   },
@@ -532,6 +532,118 @@ const venues = [
     note: "Friday and Saturday run later; daytime cafe hours are not the same as crawl hours.",
     hours: allDays([[20, 25]], { 4: [[20, 27]], 5: [[21, 27]], 6: [[21, 25]] }),
     source: { label: "Bar Bukowski", url: "https://www.iamsterdam.com/en/whats-on/calendar/eating-and-drinking/cafes-and-bars/bar-bukowski" },
+  },
+  {
+    name: "The Poolbar",
+    area: "Centrum",
+    address: "Voetboogstraat 3-B, 1012 XK Amsterdam",
+    lat: 52.3675,
+    lng: 4.8894,
+    price: "medium",
+    tags: ["games", "late-night", "craft-beer"],
+    moods: ["friends", "work", "visitors"],
+    vibe: "Central pool hall energy with drinks close by and a built-in reason to linger.",
+    bestFor: "Pool tables when the crawl needs a competitive middle stop.",
+    note: "Book a table if the group is counting on pool rather than treating it as a bonus.",
+    hours: allDays([[16, 25]], { 4: [[16, 26]], 5: [[16, 27]], 6: [[14, 27]], 0: [[14, 25]] }),
+    source: { label: "The Poolbar", url: "https://www.thepoolbar.nl/" },
+    needsBooking: true,
+  },
+  {
+    name: "GlowGolf Amsterdam",
+    area: "Centrum",
+    address: "Prins Hendrikkade 194, 1011 TD Amsterdam",
+    lat: 52.374,
+    lng: 4.9075,
+    price: "medium",
+    tags: ["games", "hidden"],
+    moods: ["friends", "date", "visitors"],
+    vibe: "Blacklight mini golf near the eastern edge of the centre, silly in the useful way.",
+    bestFor: "A playful early stop before moving into Nieuwmarkt or the canals.",
+    note: "Best planned ahead; mini golf is more slot-based than a normal bar stop.",
+    hours: allDays([[12, 22]], { 5: [[12, 23]], 6: [[12, 23]] }),
+    source: { label: "GlowGolf", url: "https://www.glowgolf.nl/amsterdam/" },
+    needsBooking: true,
+  },
+  {
+    name: "Aloha Amsterdam",
+    area: "Centrum",
+    address: "De Ruijterkade 151, 1011 AC Amsterdam",
+    lat: 52.3771,
+    lng: 4.9106,
+    price: "medium",
+    tags: ["games", "bowling", "terrace", "food"],
+    moods: ["friends", "work", "visitors"],
+    vibe: "Bowling, mini golf, karaoke, and waterfront drinks by Centraal.",
+    bestFor: "A bigger-group activity stop when one round of drinks is not enough structure.",
+    note: "Reserve lanes or games in advance; this works best as an anchor stop.",
+    hours: allDays([[12, 24]], { 4: [[12, 25]], 5: [[12, 26]], 6: [[12, 26]] }),
+    source: { label: "Aloha", url: "https://aloha.nl/amsterdam/" },
+    needsBooking: true,
+  },
+  {
+    name: "Knijn Bowling",
+    area: "De Pijp",
+    address: "Scheldeplein 3, 1078 GR Amsterdam",
+    lat: 52.3451,
+    lng: 4.8916,
+    price: "medium",
+    tags: ["games", "bowling", "food"],
+    moods: ["friends", "work", "visitors"],
+    vibe: "Classic bowling lanes in Zuid, more old-school group night than cocktail pose.",
+    bestFor: "Bowling-first plans with drinks before or after.",
+    note: "It sits south of De Pijp, so pair it with De Pijp stops rather than a centre crawl.",
+    hours: allDays([[10, 24]], { 5: [[10, 24.5]], 6: [[12, 24]], 0: [[12, 23]] }),
+    source: { label: "Knijn Bowling", url: "https://bestellen.knijnbowling.nl/" },
+    needsBooking: true,
+  },
+  {
+    name: "TonTon Club Westergas",
+    area: "Westerpark",
+    address: "Polonceaukade 27, 1014 DA Amsterdam",
+    lat: 52.3866,
+    lng: 4.8737,
+    price: "medium",
+    tags: ["games", "terrace", "food", "late-night"],
+    moods: ["friends", "date", "visitors", "work"],
+    vibe: "Arcade games, board games, drinks, and Westergas looseness.",
+    bestFor: "A low-pressure games stop that still feels like a bar.",
+    note: "Closed Monday and Tuesday; Friday and Saturday are listed as open until late.",
+    hours: { 0: [], 1: [], 2: [[16, 25]], 3: [[16, 25]], 4: [[14, 27]], 5: [[13, 27]], 6: [[13, 25]] },
+    source: { label: "TonTon Club", url: "https://www.tontonclub.nl/green-arcade-nl/" },
+    needsBooking: true,
+  },
+  {
+    name: "Mooie Boules Amsterdam",
+    area: "Oost",
+    address: "Zeeburgerpad 3, 1018 AJ Amsterdam",
+    lat: 52.3672,
+    lng: 4.925,
+    price: "medium",
+    tags: ["games", "food", "terrace"],
+    moods: ["friends", "work", "visitors"],
+    vibe: "Indoor jeu de boules, street-food stands, drinks, and easy group momentum.",
+    bestFor: "Groups that want an activity without splitting into tiny lanes or tables.",
+    note: "Reserve a boules lane if the game is the reason for going.",
+    hours: allDays([[16, 24]], { 4: [[16, 25]], 5: [[12, 25]], 6: [[12, 24]], 0: [[12, 23]] }),
+    source: { label: "Mooie Boules", url: "https://mooieboules.nl/amsterdam/" },
+    needsBooking: true,
+  },
+  {
+    name: "Blast Galaxy",
+    area: "Westerpark",
+    address: "Magneetstraat 5, 1014 CC Amsterdam",
+    lat: 52.3923,
+    lng: 4.8569,
+    price: "medium",
+    tags: ["games", "hidden"],
+    moods: ["friends", "visitors"],
+    vibe: "Retro arcade chaos with cabinets, pinball, and neon nostalgia.",
+    bestFor: "An arcade detour when everyone wants to play rather than sit.",
+    note: "Check current opening days before routing the whole group west.",
+    hours: { 0: [], 1: [], 2: [[14, 22]], 3: [[14, 22]], 4: [[14, 24]], 5: [[12, 24]], 6: [[12, 22]] },
+    source: { label: "Blast Galaxy", url: "https://blastgalaxy.nl/" },
+    needsBooking: true,
   },
 ];
 
@@ -606,15 +718,16 @@ function buildPlan(answers) {
     .map((venue) => {
       const openScore = openScoreForVenue(venue, day, startHour, effectiveDuration);
       const tagScore = answers.vibes.reduce((score, vibe) => score + (venue.tags.includes(vibe) ? 7 : 0), 0);
+      const gameScore = answers.vibes.includes("games") && venue.tags.includes("games") ? 8 : 0;
       const moodScore = venue.moods.includes(answers.groupMood) ? 4 : 0;
-      const areaScore = answers.area === "any" || venue.area === answers.area ? 4 : -2;
+      const areaScore = answers.area === "any" ? 4 : venue.area === answers.area ? 12 : -8;
       const priceGap = Math.abs(budgetRank[venue.price] - budgetRank[answers.budget]);
       const priceScore = 3 - priceGap * 2;
       const sizeScore = venue.smallGroup && answers.groupSize > 4 ? -9 : answers.groupSize > 8 && venue.needsBooking ? -5 : 1;
       const lateScore = answers.vibes.includes("late-night") && closesAfter(venue, day, 25.5) ? 4 : 0;
       return {
         venue,
-        score: openScore + tagScore + moodScore + areaScore + priceScore + sizeScore + lateScore,
+        score: openScore + tagScore + gameScore + moodScore + areaScore + priceScore + sizeScore + lateScore,
       };
     })
     .filter((item) => item.score > -20)
@@ -646,9 +759,10 @@ function chooseRoute(scored, answers, day, startHour, stopCount) {
   const first = candidates
     .map((item) => {
       const nearby = candidates.filter((other) => other.venue !== item.venue && walkingMeters(item.venue, other.venue) <= softLeg).length;
+      const selectedAreaStart = answers.area !== "any" && item.venue.area === answers.area ? 22 : 0;
       return {
         ...item,
-        routeScore: item.score + nearby * 1.6 + (isOpenAt(item.venue, day, startHour) ? 3 : 0),
+        routeScore: item.score + nearby * 1.6 + selectedAreaStart + (isOpenAt(item.venue, day, startHour) ? 3 : 0),
       };
     })
     .sort((a, b) => b.routeScore - a.routeScore)[0]?.venue;
@@ -900,7 +1014,7 @@ function sanitizeAnswers(answers) {
   const allowed = {
     duration: ["3", "4", "5", "6", "all-night"],
     groupMood: ["friends", "date", "work", "visitors"],
-    vibes: ["cocktails", "craft-beer", "live-music", "terrace", "hidden", "late-night"],
+    vibes: ["cocktails", "craft-beer", "live-music", "terrace", "hidden", "late-night", "games"],
     area: ["any", "Centrum", "Jordaan", "Leidseplein", "De Pijp", "Oud-West", "Westerpark", "Noord", "Oost"],
     budget: ["low", "medium", "high"],
     pace: ["relaxed", "balanced", "lively"],
@@ -991,6 +1105,14 @@ function makeVibeLine(answers, plan) {
   const hasMusic = answers.vibes.includes("live-music");
   const hasBeer = answers.vibes.includes("craft-beer");
   const hasCocktails = answers.vibes.includes("cocktails");
+  const hasGames = answers.vibes.includes("games");
+
+  if (hasGames) {
+    return {
+      title: "Drinks with something to play for.",
+      copy: `A ${starts}, activity-friendly stops, and enough bar energy that the night still feels like a crawl.`,
+    };
+  }
 
   if (hasMusic) {
     return {
@@ -1144,6 +1266,8 @@ function labelFor(value) {
     cocktails: "Cocktails",
     terrace: "Terrace",
     hidden: "Hidden gems",
+    games: "Games",
+    bowling: "Bowling",
     relaxed: "Relaxed",
     balanced: "Balanced",
     lively: "Lively",
