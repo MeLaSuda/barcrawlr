@@ -655,9 +655,12 @@ const results = document.querySelector("#results");
 const emptyState = document.querySelector("#empty-state");
 const dateInput = document.querySelector("#crawl-date");
 const sourceLinks = document.querySelector("#source-links");
+const includeBarSelect = document.querySelector("#include-bar");
+const excludedBarsInput = document.querySelector("#excluded-bars");
 
 dateInput.value = todayValue();
 renderSourceLinks();
+renderVenueOptions();
 restoreSharedPlan();
 
 form.addEventListener("submit", (event) => {
@@ -668,6 +671,20 @@ form.addEventListener("submit", (event) => {
 });
 
 results.addEventListener("click", async (event) => {
+  const clearButton = event.target.closest("[data-clear-excluded]");
+  if (clearButton) {
+    excludedBarsInput.value = "";
+    const answers = readAnswers();
+    renderPlan(buildPlan(answers), answers, { syncUrl: true });
+    return;
+  }
+
+  const removeButton = event.target.closest("[data-remove-bar]");
+  if (removeButton) {
+    removeBarFromRoute(removeButton.dataset.removeBar);
+    return;
+  }
+
   const button = event.target.closest("[data-copy-share]");
   if (!button) return;
 
@@ -689,7 +706,7 @@ function allDays(defaultRanges, overrides = {}) {
 
 function readAnswers() {
   const data = new FormData(form);
-  return {
+  return sanitizeAnswers({
     groupSize: clamp(Number(data.get("groupSize") || 1), 1, 16),
     startTime: data.get("startTime") || "19:30",
     crawlDate: data.get("crawlDate") || todayValue(),
@@ -700,11 +717,15 @@ function readAnswers() {
     budget: data.get("budget") || "medium",
     pace: data.get("pace") || "balanced",
     walkLimit: Number(data.get("walkLimit") || 1000),
+    includeBar: data.get("includeBar") || "",
+    includeMode: data.get("includeMode") || "start",
+    excludedBars: readExcludedBars(data.get("excludedBars") || ""),
     reservations: data.get("reservations") === "on",
-  };
+  });
 }
 
 function buildPlan(answers) {
+  answers = sanitizeAnswers({ vibes: [], excludedBars: [], ...answers });
   const day = getAmsterdamDay(answers.crawlDate);
   const startHour = timeToHour(answers.startTime);
   const isAllNight = answers.duration === "all-night";
@@ -715,6 +736,7 @@ function buildPlan(answers) {
   const budgetRank = { low: 1, medium: 2, high: 3 };
 
   const scored = venues
+    .filter((venue) => !answers.excludedBars.includes(venue.name) || venue.name === answers.includeBar)
     .map((venue) => {
       const openScore = openScoreForVenue(venue, day, startHour, effectiveDuration);
       const tagScore = answers.vibes.reduce((score, vibe) => score + (venue.tags.includes(vibe) ? 7 : 0), 0);
@@ -731,7 +753,7 @@ function buildPlan(answers) {
         score: openScore + tagScore + gameScore + chillBeerScore + moodScore + areaScore + priceScore + sizeScore + lateScore,
       };
     })
-    .filter((item) => item.score > -20)
+    .filter((item) => item.score > -20 || item.venue.name === answers.includeBar)
     .sort((a, b) => b.score - a.score);
 
   const route = chooseRoute(scored, answers, day, startHour, stopCount);
@@ -755,18 +777,21 @@ function buildPlan(answers) {
 function chooseRoute(scored, answers, day, startHour, stopCount) {
   const chosen = [];
   const candidates = scored.map((item) => item);
+  const forcedItem = candidates.find((item) => item.venue.name === answers.includeBar);
   const preferredLeg = answers.walkLimit;
   const softLeg = answers.walkLimit === 600 ? 900 : answers.walkLimit === 1000 ? 1700 : 2400;
-  const first = candidates
-    .map((item) => {
-      const nearby = candidates.filter((other) => other.venue !== item.venue && walkingMeters(item.venue, other.venue) <= softLeg).length;
-      const selectedAreaStart = answers.area !== "any" && item.venue.area === answers.area ? 22 : 0;
-      return {
-        ...item,
-        routeScore: item.score + nearby * 1.6 + selectedAreaStart + (isOpenAt(item.venue, day, startHour) ? 3 : 0),
-      };
-    })
-    .sort((a, b) => b.routeScore - a.routeScore)[0]?.venue;
+  const first = forcedItem && answers.includeMode === "start"
+    ? forcedItem.venue
+    : candidates
+        .map((item) => {
+          const nearby = candidates.filter((other) => other.venue !== item.venue && walkingMeters(item.venue, other.venue) <= softLeg).length;
+          const selectedAreaStart = answers.area !== "any" && item.venue.area === answers.area ? 22 : 0;
+          return {
+            ...item,
+            routeScore: item.score + nearby * 1.6 + selectedAreaStart + (isOpenAt(item.venue, day, startHour) ? 3 : 0),
+          };
+        })
+        .sort((a, b) => b.routeScore - a.routeScore)[0]?.venue;
 
   if (first) chosen.push(first);
 
@@ -798,7 +823,35 @@ function chooseRoute(scored, answers, day, startHour, stopCount) {
     });
   }
 
+  if (forcedItem && !chosen.includes(forcedItem.venue)) {
+    return insertForcedVenue(chosen, forcedItem.venue, stopCount);
+  }
+
   return chosen;
+}
+
+function insertForcedVenue(route, forcedVenue, stopCount) {
+  const baseRoute = route.slice(0, Math.max(stopCount - 1, 0));
+  if (!baseRoute.length) return [forcedVenue];
+
+  let bestIndex = 0;
+  let bestAddedDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 1; index <= baseRoute.length; index += 1) {
+    const previous = baseRoute[index - 1];
+    const next = baseRoute[index];
+    const addedDistance =
+      (previous ? walkingMeters(previous, forcedVenue) : 0) +
+      (next ? walkingMeters(forcedVenue, next) : 0) -
+      (previous && next ? walkingMeters(previous, next) : 0);
+
+    if (addedDistance < bestAddedDistance) {
+      bestAddedDistance = addedDistance;
+      bestIndex = index;
+    }
+  }
+
+  return [...baseRoute.slice(0, bestIndex), forcedVenue, ...baseRoute.slice(bestIndex)];
 }
 
 function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
@@ -862,9 +915,12 @@ function renderPlan(plan, answers, options = {}) {
         ${answers.vibes.slice(0, 4).map((vibe) => `<span class="pill">${labelFor(vibe)}</span>`).join("")}
         <span class="pill">${labelFor(answers.pace)} pace</span>
         <span class="pill">${answers.groupSize} ${answers.groupSize === 1 ? "person" : "people"}</span>
+        ${answers.includeBar ? `<span class="pill">Include ${escapeHtml(answers.includeBar)}</span>` : ""}
       </div>
       <a class="secondary-action" href="${routeUrl}" target="_blank" rel="noreferrer">Open route</a>
     </div>
+
+    ${renderExcludedNotice(answers)}
 
     <article class="share-box">
       <div>
@@ -901,6 +957,7 @@ function renderStop(stop, index, previousStop, answers) {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.address)}`;
   const leg = previousStop ? renderLeg(previousStop.venue, venue) : "";
   const warning = warningFor(stop, answers);
+  const canRemove = planCanRemove(answers, venue);
 
   return `
     ${leg}
@@ -911,7 +968,10 @@ function renderStop(stop, index, previousStop, answers) {
       <div class="venue-main">
         <div class="venue-top">
           <h3>${escapeHtml(venue.name)}</h3>
-          <a class="venue-link" href="${venue.source.url}" target="_blank" rel="noreferrer">Check venue</a>
+          <div class="venue-actions">
+            <a class="venue-link" href="${venue.source.url}" target="_blank" rel="noreferrer">Check venue</a>
+            ${canRemove ? `<button class="text-action" type="button" data-remove-bar="${escapeHtml(venue.name)}">Remove</button>` : ""}
+          </div>
         </div>
         <p>${escapeHtml(venue.vibe)}</p>
         <p><strong>${escapeHtml(venue.bestFor)}</strong></p>
@@ -943,6 +1003,48 @@ function renderSourceLinks() {
   sourceLinks.innerHTML = uniqueSources
     .map((source) => `<a href="${source.url}" target="_blank" rel="noreferrer">${source.label}</a>`)
     .join("");
+}
+
+function renderVenueOptions() {
+  includeBarSelect.insertAdjacentHTML(
+    "beforeend",
+    venues
+      .map((venue) => venue.name)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+      .join(""),
+  );
+}
+
+function renderExcludedNotice(answers) {
+  if (!answers.excludedBars.length) return "";
+  return `
+    <div class="excluded-box">
+      <span>Removed from this route: ${answers.excludedBars.map(escapeHtml).join(", ")}</span>
+      <button class="text-action" type="button" data-clear-excluded>Clear removed bars</button>
+    </div>
+  `;
+}
+
+function planCanRemove(answers, venue) {
+  return venue.name !== answers.includeBar || answers.includeMode !== "start";
+}
+
+function removeBarFromRoute(name) {
+  const answers = readAnswers();
+  const venueName = validVenueName(name);
+  if (!venueName) return;
+
+  if (answers.includeBar === venueName) {
+    form.elements.includeBar.value = "";
+  }
+
+  const excluded = new Set(answers.excludedBars);
+  excluded.add(venueName);
+  excludedBarsInput.value = Array.from(excluded).join("|");
+
+  const nextAnswers = readAnswers();
+  renderPlan(buildPlan(nextAnswers), nextAnswers, { syncUrl: true });
 }
 
 function restoreSharedPlan() {
@@ -984,6 +1086,9 @@ function buildShareParams(answers) {
     reservations: answers.reservations ? "1" : "0",
   });
   if (answers.vibes.length) params.set("vibes", answers.vibes.join(","));
+  if (answers.includeBar) params.set("include", answers.includeBar);
+  if (answers.includeMode !== "start") params.set("includeMode", answers.includeMode);
+  if (answers.excludedBars.length) params.set("exclude", answers.excludedBars.join("|"));
   return params;
 }
 
@@ -1007,6 +1112,9 @@ function answersFromUrl() {
     budget: params.get("budget") || "medium",
     pace: params.get("pace") || "balanced",
     walkLimit: Number(params.get("walk") || 1000),
+    includeBar: params.get("include") || "",
+    includeMode: params.get("includeMode") || "start",
+    excludedBars: readExcludedBars(params.get("exclude") || ""),
     reservations: params.get("reservations") !== "0",
   });
 }
@@ -1020,11 +1128,17 @@ function sanitizeAnswers(answers) {
     budget: ["low", "medium", "high"],
     pace: ["relaxed", "balanced", "lively"],
     walkLimit: ["600", "1000", "1600"],
+    includeMode: ["start", "mix"],
   };
 
   const durationValue = String(answers.duration);
   const walkValue = String(answers.walkLimit);
   const cleanVibes = answers.vibes.filter((vibe) => allowed.vibes.includes(vibe));
+  const includeBar = validVenueName(answers.includeBar || "");
+  const excludedBars = (answers.excludedBars || [])
+    .map(validVenueName)
+    .filter(Boolean)
+    .filter((name) => name !== includeBar);
 
   return {
     groupSize: clamp(Number(answers.groupSize || 4), 1, 16),
@@ -1037,6 +1151,9 @@ function sanitizeAnswers(answers) {
     budget: allowed.budget.includes(answers.budget) ? answers.budget : "medium",
     pace: allowed.pace.includes(answers.pace) ? answers.pace : "balanced",
     walkLimit: allowed.walkLimit.includes(walkValue) ? Number(walkValue) : 1000,
+    includeBar,
+    includeMode: allowed.includeMode.includes(answers.includeMode) ? answers.includeMode : "start",
+    excludedBars,
     reservations: Boolean(answers.reservations),
   };
 }
@@ -1051,11 +1168,27 @@ function setFormAnswers(answers) {
   form.elements.budget.value = answers.budget;
   form.elements.pace.value = answers.pace;
   form.elements.walkLimit.value = answers.walkLimit;
+  form.elements.includeBar.value = answers.includeBar;
+  form.elements.includeMode.value = answers.includeMode;
+  form.elements.excludedBars.value = answers.excludedBars.join("|");
   form.elements.reservations.checked = answers.reservations;
 
   form.querySelectorAll('input[name="vibe"]').forEach((input) => {
     input.checked = answers.vibes.includes(input.value);
   });
+}
+
+function readExcludedBars(value) {
+  return String(value)
+    .split("|")
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map(validVenueName)
+    .filter(Boolean);
+}
+
+function validVenueName(name) {
+  return venues.find((venue) => venue.name === name)?.name || "";
 }
 
 async function copyToClipboard(value) {

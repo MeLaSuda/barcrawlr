@@ -190,6 +190,13 @@ h3 {
   font-weight: 800;
 }
 
+.helper-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .segmented,
 .chips {
   display: flex;
@@ -444,6 +451,26 @@ button.secondary-action {
   justify-content: space-between;
 }
 
+.venue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.text-action {
+  border: 0;
+  padding: 0;
+  color: var(--coral);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 900;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 .venue-card p {
   margin: 8px 0 0;
   color: var(--muted);
@@ -509,6 +536,21 @@ button.secondary-action {
   gap: 14px;
   align-items: center;
   padding: 16px;
+}
+
+.excluded-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff0f0;
+  color: #3a1919;
+  font-size: 0.9rem;
+  font-weight: 800;
 }
 
 .share-box p {

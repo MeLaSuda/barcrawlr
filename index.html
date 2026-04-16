@@ -129,6 +129,28 @@
             </label>
           </div>
 
+          <fieldset class="choice-set">
+            <legend>Include this bar</legend>
+            <div class="question-grid">
+              <label class="field">
+                <span>Bar to include</span>
+                <select id="include-bar" name="includeBar">
+                  <option value="">No specific bar</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Where should it go?</span>
+                <select id="include-mode" name="includeMode">
+                  <option value="start">Start there</option>
+                  <option value="mix">Somewhere in the mix</option>
+                </select>
+              </label>
+            </div>
+            <p class="helper-text">Pick a must-have stop, then remove any generated bars you do not want.</p>
+            <input id="excluded-bars" name="excludedBars" type="hidden" value="" />
+          </fieldset>
+
           <label class="toggle-row">
             <input id="reservations" name="reservations" type="checkbox" checked />
             <span>Flag places where booking or small-group caution matters</span>
