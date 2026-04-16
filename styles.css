@@ -82,6 +82,11 @@ h1 {
   letter-spacing: 0;
 }
 
+.title-emoji {
+  display: inline-block;
+  white-space: nowrap;
+}
+
 h2 {
   margin: 0;
   font-size: clamp(1.35rem, 5vw, 2.15rem);
