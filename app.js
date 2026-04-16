@@ -931,7 +931,7 @@ function renderPlan(plan, answers, options = {}) {
         <span class="pill">${answers.groupSize} ${answers.groupSize === 1 ? "person" : "people"}</span>
         ${answers.includeBar ? `<span class="pill">Include ${escapeHtml(answers.includeBar)}</span>` : ""}
       </div>
-      <a class="secondary-action" href="${routeUrl}" target="_blank" rel="noreferrer">Open route</a>
+      <a class="secondary-action" href="${routeUrl}" target="_blank" rel="noreferrer">Open in maps</a>
     </div>
 
     ${renderExcludedNotice(answers)}
