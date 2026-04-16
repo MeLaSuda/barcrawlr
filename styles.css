@@ -289,15 +289,15 @@ button.secondary-action {
 }
 
 .result-panel {
-  min-height: 620px;
+  min-height: 320px;
   overflow: hidden;
 }
 
 .empty-state {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(260px, 1fr);
-  min-height: 620px;
-  align-items: stretch;
+  min-height: 320px;
+  align-items: center;
 }
 
 .empty-state div {
@@ -309,10 +309,10 @@ button.secondary-action {
 
 .empty-state .emoji-panel {
   display: grid;
-  min-height: 320px;
+  min-height: 180px;
   place-items: center;
-  padding: 24px;
-  font-size: clamp(4rem, 14vw, 8rem);
+  padding: 18px;
+  font-size: clamp(3rem, 8vw, 5.5rem);
   line-height: 1;
 }
 
