@@ -289,16 +289,16 @@ button.secondary-action {
 }
 
 .result-panel {
-  min-height: 320px;
+  min-height: 0;
   overflow: hidden;
 }
 
 .empty-state {
   display: flex;
-  min-height: 320px;
+  min-height: 112px;
   align-items: center;
   justify-content: flex-start;
-  padding: 26px;
+  padding: 22px 26px;
 }
 
 .empty-state .emoji-panel {
