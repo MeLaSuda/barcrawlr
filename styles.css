@@ -295,33 +295,25 @@ button.secondary-action {
 
 .empty-state {
   display: grid;
-  grid-template-columns: minmax(170px, 280px) minmax(320px, 620px);
+  grid-template-columns: auto minmax(260px, 420px);
   min-height: 320px;
   align-items: center;
   justify-content: end;
-  padding-right: 34px;
 }
 
 .empty-state div {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 32px;
 }
 
 .empty-state .emoji-panel {
   display: grid;
-  min-height: 180px;
+  min-height: 0;
   place-items: center end;
-  padding: 18px;
-  font-size: clamp(3rem, 8vw, 5.5rem);
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
   line-height: 1;
-}
-
-.empty-state p:last-child {
-  color: var(--muted);
-  font-size: 1.04rem;
-  line-height: 1.55;
+  white-space: nowrap;
 }
 
 .results {
@@ -681,10 +673,6 @@ button.secondary-action {
   .result-panel,
   .empty-state {
     min-height: 0;
-  }
-
-  .empty-state div {
-    padding: 22px;
   }
 
   .venue-card {
