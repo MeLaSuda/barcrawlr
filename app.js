@@ -536,6 +536,7 @@ const venues = [
 ];
 
 const fallbackImage = "https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=1100&q=82";
+const publicSiteUrl = "https://melasuda.github.io/barcrawlr/";
 
 const form = document.querySelector("#crawl-form");
 const results = document.querySelector("#results");
@@ -545,12 +546,26 @@ const sourceLinks = document.querySelector("#source-links");
 
 dateInput.value = todayValue();
 renderSourceLinks();
+restoreSharedPlan();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const answers = readAnswers();
   const plan = buildPlan(answers);
-  renderPlan(plan, answers);
+  renderPlan(plan, answers, { syncUrl: true });
+});
+
+results.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-copy-share]");
+  if (!button) return;
+
+  const url = button.dataset.copyShare;
+  const originalText = button.textContent;
+  const copied = await copyToClipboard(url);
+  button.textContent = copied ? "Copied" : "Select link";
+  setTimeout(() => {
+    button.textContent = originalText;
+  }, 1800);
 });
 
 function allDays(defaultRanges, overrides = {}) {
@@ -694,16 +709,23 @@ function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
   });
 }
 
-function renderPlan(plan, answers) {
+function renderPlan(plan, answers, options = {}) {
   emptyState.hidden = true;
   results.hidden = false;
 
   const routeUrl = buildDirectionsUrl(plan.stops.map((stop) => stop.venue));
+  const shareUrl = buildShareUrl(answers);
+  const shareText = buildShareText(plan, answers, shareUrl);
+  const smsUrl = `sms:?body=${encodeURIComponent(shareText)}`;
   const vibeLine = makeVibeLine(answers, plan);
   const warnings = plan.stops
     .filter((stop) => stop.closesSoon || shouldWarn(stop.venue, answers))
     .map((stop) => warningFor(stop, answers))
     .filter(Boolean);
+
+  if (options.syncUrl) {
+    window.history.pushState({ barcrawlr: true }, "", buildStateUrl(answers));
+  }
 
   results.innerHTML = `
     <article class="route-hero">
@@ -729,6 +751,19 @@ function renderPlan(plan, answers) {
       <a class="secondary-action" href="${routeUrl}" target="_blank" rel="noreferrer">Open route</a>
     </div>
 
+    <article class="share-box">
+      <div>
+        <p class="eyebrow">Send the plan</p>
+        <h3>Share this itinerary</h3>
+        <p>Anyone with the link gets these answers preloaded and lands on the route.</p>
+      </div>
+      <div class="share-actions">
+        <a class="secondary-action" href="${smsUrl}">Text it</a>
+        <button class="secondary-action" type="button" data-copy-share="${escapeHtml(shareUrl)}">Copy link</button>
+      </div>
+      <input class="share-url" value="${escapeHtml(shareUrl)}" readonly aria-label="Shareable itinerary URL" />
+    </article>
+
     <div class="venue-list">
       ${plan.stops.map((stop, index) => renderStop(stop, index, plan.stops[index - 1], answers)).join("")}
     </div>
@@ -741,7 +776,9 @@ function renderPlan(plan, answers) {
     </article>
   `;
 
-  results.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (options.scroll !== false) {
+    results.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function renderStop(stop, index, previousStop, answers) {
@@ -791,6 +828,131 @@ function renderSourceLinks() {
   sourceLinks.innerHTML = uniqueSources
     .map((source) => `<a href="${source.url}" target="_blank" rel="noreferrer">${source.label}</a>`)
     .join("");
+}
+
+function restoreSharedPlan() {
+  const answers = answersFromUrl();
+  if (!answers) return;
+
+  setFormAnswers(answers);
+  renderPlan(buildPlan(answers), answers, { scroll: window.location.hash === "#itinerary" });
+}
+
+function buildShareUrl(answers) {
+  const params = buildShareParams(answers);
+  const shareBase = ["localhost", "127.0.0.1", ""].includes(window.location.hostname)
+    ? new URL(publicSiteUrl)
+    : new URL(window.location.href);
+  shareBase.search = params.toString();
+  shareBase.hash = "itinerary";
+  return shareBase.toString();
+}
+
+function buildStateUrl(answers) {
+  const url = new URL(window.location.href);
+  url.search = buildShareParams(answers).toString();
+  url.hash = "itinerary";
+  return url.toString();
+}
+
+function buildShareParams(answers) {
+  const params = new URLSearchParams({
+    group: String(answers.groupSize),
+    start: answers.startTime,
+    date: answers.crawlDate,
+    duration: String(answers.duration),
+    mood: answers.groupMood,
+    area: answers.area,
+    budget: answers.budget,
+    pace: answers.pace,
+    walk: String(answers.walkLimit),
+    reservations: answers.reservations ? "1" : "0",
+  });
+  if (answers.vibes.length) params.set("vibes", answers.vibes.join(","));
+  return params;
+}
+
+function buildShareText(plan, answers, shareUrl) {
+  const stops = plan.stops.map((stop) => `${formatHour(stop.startHour)} ${stop.venue.name}`).join(" -> ");
+  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}. Open it here: ${shareUrl}`;
+}
+
+function answersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("start") && !params.has("vibes") && !params.has("duration")) return null;
+
+  return sanitizeAnswers({
+    groupSize: Number(params.get("group") || 4),
+    startTime: params.get("start") || "19:30",
+    crawlDate: params.get("date") || todayValue(),
+    duration: params.get("duration") === "all-night" ? "all-night" : Number(params.get("duration") || 4),
+    groupMood: params.get("mood") || "friends",
+    vibes: (params.get("vibes") || "cocktails").split(",").filter(Boolean),
+    area: params.get("area") || "any",
+    budget: params.get("budget") || "medium",
+    pace: params.get("pace") || "balanced",
+    walkLimit: Number(params.get("walk") || 1000),
+    reservations: params.get("reservations") !== "0",
+  });
+}
+
+function sanitizeAnswers(answers) {
+  const allowed = {
+    duration: ["3", "4", "5", "6", "all-night"],
+    groupMood: ["friends", "date", "work", "visitors"],
+    vibes: ["cocktails", "craft-beer", "live-music", "terrace", "hidden", "late-night"],
+    area: ["any", "Centrum", "Jordaan", "Leidseplein", "De Pijp", "Oud-West", "Westerpark", "Noord", "Oost"],
+    budget: ["low", "medium", "high"],
+    pace: ["relaxed", "balanced", "lively"],
+    walkLimit: ["600", "1000", "1600"],
+  };
+
+  const durationValue = String(answers.duration);
+  const walkValue = String(answers.walkLimit);
+  const cleanVibes = answers.vibes.filter((vibe) => allowed.vibes.includes(vibe));
+
+  return {
+    groupSize: clamp(Number(answers.groupSize || 4), 1, 16),
+    startTime: /^\d{2}:\d{2}$/.test(answers.startTime) ? answers.startTime : "19:30",
+    crawlDate: /^\d{4}-\d{2}-\d{2}$/.test(answers.crawlDate) ? answers.crawlDate : todayValue(),
+    duration: allowed.duration.includes(durationValue) ? (durationValue === "all-night" ? durationValue : Number(durationValue)) : 4,
+    groupMood: allowed.groupMood.includes(answers.groupMood) ? answers.groupMood : "friends",
+    vibes: cleanVibes.length ? cleanVibes : ["cocktails"],
+    area: allowed.area.includes(answers.area) ? answers.area : "any",
+    budget: allowed.budget.includes(answers.budget) ? answers.budget : "medium",
+    pace: allowed.pace.includes(answers.pace) ? answers.pace : "balanced",
+    walkLimit: allowed.walkLimit.includes(walkValue) ? Number(walkValue) : 1000,
+    reservations: Boolean(answers.reservations),
+  };
+}
+
+function setFormAnswers(answers) {
+  form.elements.groupSize.value = answers.groupSize;
+  form.elements.startTime.value = answers.startTime;
+  form.elements.crawlDate.value = answers.crawlDate;
+  form.elements.duration.value = answers.duration;
+  form.elements.groupMood.value = answers.groupMood;
+  form.elements.area.value = answers.area;
+  form.elements.budget.value = answers.budget;
+  form.elements.pace.value = answers.pace;
+  form.elements.walkLimit.value = answers.walkLimit;
+  form.elements.reservations.checked = answers.reservations;
+
+  form.querySelectorAll('input[name="vibe"]').forEach((input) => {
+    input.checked = answers.vibes.includes(input.value);
+  });
+}
+
+async function copyToClipboard(value) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 function warningFor(stop, answers) {

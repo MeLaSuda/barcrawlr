@@ -279,6 +279,10 @@ h3 {
   border: 1px solid var(--ink);
 }
 
+button.secondary-action {
+  appearance: none;
+}
+
 .result-panel {
   min-height: 620px;
   overflow: hidden;
@@ -493,11 +497,44 @@ h3 {
   background: var(--line);
 }
 
+.share-box,
 .backup-box,
 .source-strip {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.share-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+}
+
+.share-box p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.share-url {
+  grid-column: 1 / -1;
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: #fbfcfe;
 }
 
 .backup-box {
@@ -576,8 +613,17 @@ h3 {
   }
 
   .question-grid,
-  .route-stats {
+  .route-stats,
+  .share-box {
     grid-template-columns: 1fr;
+  }
+
+  .share-actions {
+    justify-content: stretch;
+  }
+
+  .share-actions .secondary-action {
+    flex: 1 1 130px;
   }
 
   .question-panel,
