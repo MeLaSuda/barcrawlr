@@ -295,9 +295,11 @@ button.secondary-action {
 
 .empty-state {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(170px, 280px) minmax(320px, 620px);
   min-height: 320px;
   align-items: center;
+  justify-content: end;
+  padding-right: 34px;
 }
 
 .empty-state div {
@@ -310,7 +312,7 @@ button.secondary-action {
 .empty-state .emoji-panel {
   display: grid;
   min-height: 180px;
-  place-items: center;
+  place-items: center end;
   padding: 18px;
   font-size: clamp(3rem, 8vw, 5.5rem);
   line-height: 1;
@@ -624,6 +626,15 @@ button.secondary-action {
   .empty-state,
   .route-hero {
     grid-template-columns: 1fr;
+  }
+
+  .empty-state {
+    justify-content: stretch;
+    padding-right: 0;
+  }
+
+  .empty-state .emoji-panel {
+    place-items: center;
   }
 
   .question-panel {
