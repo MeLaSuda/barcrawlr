@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="BarCrawlr builds a night-out route through Amsterdam bars from a few quick group preferences."
+    />
+    <title>BarCrawlr</title>
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="intro" aria-labelledby="app-title">
+        <div class="intro-copy">
+          <p class="eyebrow">Amsterdam tonight</p>
+          <h1 id="app-title">BarCrawlr</h1>
+          <p class="lede">
+            Tell us who is out, what kind of night you want, and when you are starting. We will line up a route with the right pace, vibe, and backup notes.
+          </p>
+        </div>
+      </section>
+
+      <section class="planner" aria-label="Plan your bar crawl">
+        <form id="crawl-form" class="question-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Quick plan</p>
+              <h2>Who is coming?</h2>
+            </div>
+            <span class="city-pill">Amsterdam</span>
+          </div>
+
+          <div class="question-grid">
+            <label class="field">
+              <span>Group size</span>
+              <input id="group-size" name="groupSize" type="number" min="1" max="16" value="4" inputmode="numeric" />
+            </label>
+
+            <label class="field">
+              <span>Start time</span>
+              <input id="start-time" name="startTime" type="time" value="19:30" />
+            </label>
+
+            <label class="field">
+              <span>Date</span>
+              <input id="crawl-date" name="crawlDate" type="date" />
+            </label>
+
+            <label class="field">
+              <span>How long?</span>
+              <select id="duration" name="duration">
+                <option value="3">3 hours</option>
+                <option value="4" selected>4 hours</option>
+                <option value="5">5 hours</option>
+                <option value="6">6 hours</option>
+                <option value="all-night">All night long, baby!</option>
+              </select>
+            </label>
+          </div>
+
+          <fieldset class="choice-set">
+            <legend>Group mood</legend>
+            <div class="segmented" data-single-choice="groupMood">
+              <label><input type="radio" name="groupMood" value="friends" checked /> Friends</label>
+              <label><input type="radio" name="groupMood" value="date" /> Date night</label>
+              <label><input type="radio" name="groupMood" value="work" /> Work crew</label>
+              <label><input type="radio" name="groupMood" value="visitors" /> Visitors</label>
+            </div>
+          </fieldset>
+
+          <fieldset class="choice-set">
+            <legend>What sounds good?</legend>
+            <div class="chips">
+              <label><input type="checkbox" name="vibe" value="cocktails" checked /> Cocktails</label>
+              <label><input type="checkbox" name="vibe" value="craft-beer" /> Craft beer</label>
+              <label><input type="checkbox" name="vibe" value="live-music" /> Live music</label>
+              <label><input type="checkbox" name="vibe" value="terrace" /> Terrace</label>
+              <label><input type="checkbox" name="vibe" value="hidden" /> Hidden gems</label>
+              <label><input type="checkbox" name="vibe" value="late-night" /> Late night</label>
+            </div>
+          </fieldset>
+
+          <div class="question-grid">
+            <label class="field">
+              <span>Preferred area</span>
+              <select id="area" name="area">
+                <option value="any" selected>Best fit</option>
+                <option value="Centrum">Centrum</option>
+                <option value="Jordaan">Jordaan</option>
+                <option value="Leidseplein">Leidseplein</option>
+                <option value="De Pijp">De Pijp</option>
+                <option value="Oud-West">Oud-West</option>
+                <option value="Westerpark">Westerpark</option>
+                <option value="Noord">Noord</option>
+                <option value="Oost">Oost</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Budget</span>
+              <select id="budget" name="budget">
+                <option value="low">Easy-going</option>
+                <option value="medium" selected>Mixed</option>
+                <option value="high">Treat night</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Pace</span>
+              <select id="pace" name="pace">
+                <option value="relaxed">Relaxed</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="lively">Lively</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Walking limit</span>
+              <select id="walk-limit" name="walkLimit">
+                <option value="600">Short hops</option>
+                <option value="1000" selected>Normal</option>
+                <option value="1600">Happy to wander</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="toggle-row">
+            <input id="reservations" name="reservations" type="checkbox" checked />
+            <span>Flag places where booking or small-group caution matters</span>
+          </label>
+
+          <button class="primary-action" type="submit">Build my crawl</button>
+        </form>
+
+        <aside class="result-panel" aria-live="polite" aria-label="Generated itinerary">
+          <div id="empty-state" class="empty-state">
+            <img
+              src="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=82"
+              alt="A warmly lit bar with bottles behind the counter"
+            />
+            <div>
+              <p class="eyebrow">Ready when you are</p>
+              <h2>Your night appears here</h2>
+              <p>
+                Start with a few answers. The route will balance opening times, walking distance, group size, and the kind of trouble you are politely requesting.
+              </p>
+            </div>
+          </div>
+
+          <div id="results" class="results" hidden></div>
+        </aside>
+      </section>
+
+      <section class="source-strip" aria-label="Venue notes">
+        <p>
+          Venue details are seeded from public venue pages and Amsterdam guides, then simplified for planning. Always check the live venue page before heading out.
+        </p>
+        <div id="source-links" class="source-links"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
