@@ -152,7 +152,7 @@ const venues = [
     lat: 52.373,
     lng: 4.884,
     price: "high",
-    tags: ["cocktails", "date", "hidden"],
+    tags: ["cocktails", "wine", "date", "hidden"],
     moods: ["date", "work", "visitors"],
     vibe: "Elegant hotel-bar calm, canal-side glamour, polished service.",
     bestFor: "A first impression drink or a date-night detour.",
@@ -699,7 +699,7 @@ const venues = [
     lat: 52.3677,
     lng: 4.8994,
     price: "medium",
-    tags: ["chill-beers", "terrace", "food"],
+    tags: ["wine", "chill-beers", "terrace", "food"],
     moods: ["friends", "work", "visitors"],
     vibe: "Warm cafe-restaurant on the canal, good for easy borrel energy and people-watching.",
     bestFor: "A central group stop with food and a terrace in the mix.",
@@ -854,7 +854,7 @@ const venues = [
     lat: 52.3679,
     lng: 4.8669,
     price: "medium",
-    tags: ["terrace", "cocktails", "food", "chill-beers"],
+    tags: ["wine", "terrace", "cocktails", "food", "chill-beers"],
     moods: ["friends", "work", "visitors"],
     vibe: "Big sunny Oud-West terrace, cafe-to-pub energy, cocktails, dinner, and room for groups.",
     bestFor: "A spacious West-side anchor when the group needs food and drinks together.",
@@ -962,7 +962,7 @@ const venues = [
     lat: 52.3714,
     lng: 4.8698,
     price: "medium",
-    tags: ["hidden", "food", "chill-beers"],
+    tags: ["wine", "hidden", "food", "chill-beers"],
     moods: ["date", "friends", "visitors"],
     vibe: "Natural-wine and Middle Eastern food stop with a softer, more grown-up tempo.",
     bestFor: "A date-ish or food-led pause in an Oud-West route.",
@@ -978,7 +978,7 @@ const venues = [
     lat: 52.3667,
     lng: 4.8674,
     price: "medium",
-    tags: ["hidden", "terrace", "food", "chill-beers"],
+    tags: ["wine", "hidden", "terrace", "food", "chill-beers"],
     moods: ["date", "friends", "visitors"],
     vibe: "Natural-wine bar and eatery on Ten Katestraat, intimate but not precious.",
     bestFor: "A wine-leaning stop that still fits a bar crawl.",
@@ -1010,7 +1010,7 @@ const venues = [
     lat: 52.3535,
     lng: 4.8847,
     price: "medium",
-    tags: ["terrace", "cocktails", "food", "chill-beers"],
+    tags: ["wine", "terrace", "cocktails", "food", "chill-beers"],
     moods: ["friends", "work", "visitors"],
     vibe: "Grand cafe polish, big terrace, cocktails, dinner, and a slightly smarter Zuid feeling.",
     bestFor: "A terrace-heavy start near Museumplein or De Pijp.",
@@ -1026,7 +1026,7 @@ const venues = [
     lat: 52.3534,
     lng: 4.8918,
     price: "medium",
-    tags: ["hidden", "terrace", "chill-beers"],
+    tags: ["wine", "hidden", "terrace", "chill-beers"],
     moods: ["date", "friends", "visitors"],
     vibe: "Natural-wine favourite with a small-shop feel and an easy De Pijp crowd.",
     bestFor: "A relaxed wine stop for a group that wants character over cocktails.",
@@ -1133,7 +1133,7 @@ const venues = [
     lat: 52.3605,
     lng: 4.9078,
     price: "medium",
-    tags: ["cocktails", "food", "terrace"],
+    tags: ["wine", "cocktails", "food", "terrace"],
     moods: ["friends", "work", "date", "visitors"],
     vibe: "Creative restaurant-bar in Capital C, with artful dinner energy and cocktails near Carré.",
     bestFor: "A work-drinks or dinner-led stop on the east edge of the centre.",
@@ -1179,7 +1179,7 @@ const venues = [
     lat: 52.3802,
     lng: 4.8873,
     price: "medium",
-    tags: ["hidden", "chill-beers", "food"],
+    tags: ["wine", "hidden", "chill-beers", "food"],
     moods: ["date", "friends", "visitors"],
     vibe: "Natural-wine, beers, and snacks in a warm Jordaan room with no-reservations looseness.",
     bestFor: "A small-group stop that feels current without being shiny.",
@@ -1719,7 +1719,7 @@ function sanitizeAnswers(answers) {
   const allowed = {
     duration: ["3", "4", "5", "6", "all-night"],
     groupMood: ["friends", "date", "work", "visitors"],
-    vibes: ["cocktails", "craft-beer", "chill-beers", "live-music", "terrace", "hidden", "late-night", "games"],
+    vibes: ["cocktails", "wine", "craft-beer", "chill-beers", "live-music", "terrace", "hidden", "late-night", "games"],
     area: ["any", "Centrum", "Jordaan", "Leidseplein", "De Pijp", "Oud-West", "Westerpark", "Noord", "Oost"],
     budget: ["low", "medium", "high"],
     pace: ["relaxed", "balanced", "lively"],
@@ -1862,6 +1862,14 @@ function makeVibeLine(answers, plan) {
   const hasChillBeers = answers.vibes.includes("chill-beers");
   const hasCocktails = answers.vibes.includes("cocktails");
   const hasGames = answers.vibes.includes("games");
+  const hasWine = answers.vibes.includes("wine");
+
+  if (hasWine) {
+    return {
+      title: "Wine, snacks, and softer rooms.",
+      copy: `A ${starts}, easy walking, and stops that lean toward wine, good bites, and conversation that can actually survive the music.`,
+    };
+  }
 
   if (hasChillBeers) {
     return {
@@ -1906,6 +1914,7 @@ function makeVibeLine(answers, plan) {
 
 function emojiForPlan(answers) {
   if (answers.vibes.includes("games")) return "🎱🎳🎯";
+  if (answers.vibes.includes("wine")) return "🍷🧀🚶";
   if (answers.vibes.includes("live-music")) return "🍻🎷🎶";
   if (answers.vibes.includes("chill-beers") || answers.vibes.includes("craft-beer")) return "🍺🍻🚶";
   if (answers.vibes.includes("terrace")) return "🍹🌤️🪑";
@@ -2037,6 +2046,7 @@ function labelFor(value) {
     "chill-beers": "Chill beers",
     "live-music": "Live music",
     "late-night": "Late night",
+    wine: "Wine",
     cocktails: "Cocktails",
     terrace: "Terrace",
     hidden: "Hidden gems",
