@@ -107,12 +107,18 @@ h3 {
   align-items: start;
 }
 
-.question-panel,
-.result-panel {
+.question-panel {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 12px 30px rgba(17, 17, 17, 0.07);
+}
+
+.result-panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .question-panel {
@@ -295,10 +301,10 @@ button.secondary-action {
 
 .empty-state {
   display: flex;
-  min-height: 112px;
+  min-height: 64px;
   align-items: center;
   justify-content: flex-start;
-  padding: 22px 26px;
+  padding: 0;
 }
 
 .empty-state .emoji-panel {
