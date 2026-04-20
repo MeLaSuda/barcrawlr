@@ -1320,6 +1320,7 @@ function readAnswers() {
     excludedBars: mergedExcludedBars(data.get("excludedBars") || ""),
     removedBars: mergedRemovedBars(data.get("removedBars") || ""),
     reservations: data.get("reservations") === "on",
+    challenges: data.get("challenges") === "yes",
   });
 }
 
@@ -1518,6 +1519,7 @@ function renderPlan(plan, answers, options = {}) {
         ${answers.vibes.slice(0, 4).map((vibe) => `<span class="pill">${labelFor(vibe)}</span>`).join("")}
         <span class="pill">${labelFor(answers.pace)} pace</span>
         <span class="pill">${answers.groupSize} ${answers.groupSize === 1 ? "person" : "people"}</span>
+        ${answers.challenges ? `<span class="pill">Challenges on</span>` : ""}
         ${answers.includeBar ? `<span class="pill">Include ${escapeHtml(answers.includeBar)}</span>` : ""}
       </div>
       <a class="secondary-action" href="${routeUrl}" target="_blank" rel="noreferrer">Open in maps</a>
@@ -1554,6 +1556,7 @@ function renderStop(stop, index, previousStop, answers) {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.address)}`;
   const leg = previousStop ? renderLeg(previousStop.venue, venue) : "";
   const warning = warningFor(stop, answers);
+  const challenge = answers.challenges ? challengeForVenue(venue, index) : null;
 
   return `
     ${leg}
@@ -1573,6 +1576,7 @@ function renderStop(stop, index, previousStop, answers) {
         </div>
         <p>${escapeHtml(venue.vibe)}</p>
         <p><strong>${escapeHtml(venue.bestFor)}</strong></p>
+        ${challenge ? renderChallenge(challenge) : ""}
         <div class="venue-meta">
           <span class="meta">${escapeHtml(venue.area)}</span>
           <span class="meta">${labelFor(venue.price)}</span>
@@ -1583,6 +1587,118 @@ function renderStop(stop, index, previousStop, answers) {
       </div>
     </article>
   `;
+}
+
+function renderChallenge(challenge) {
+  return `
+    <div class="challenge-card">
+      <span aria-hidden="true">${challenge.emoji}</span>
+      <div>
+        <strong>${escapeHtml(challenge.title)}</strong>
+        <p>${escapeHtml(challenge.copy)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function challengeForVenue(venue, index) {
+  const name = venue.name.toLowerCase();
+  const promptNumber = index + 1;
+  const fallback = [
+    "Get someone to pick the next song, even if the bar is absolutely not asking for DJ energy.",
+    "Ask the group to rate the first sip, snack, or vibe in exactly three words.",
+    "Find the strangest detail in the room and make it the official landmark for this stop.",
+  ][index % 3];
+
+  if (venue.tags.includes("bowling")) {
+    return {
+      emoji: "🎳",
+      title: `Challenge ${promptNumber}: The bowling wager`,
+      copy: "Lowest scorer owes the group a dramatic toast at the next stop.",
+    };
+  }
+  if (name.includes("glowgolf")) {
+    return {
+      emoji: "⛳",
+      title: `Challenge ${promptNumber}: Mini-golf mythology`,
+      copy: "Name your putter alter ego before the first shot. The name sticks for the rest of the night.",
+    };
+  }
+  if (name.includes("tonton") || name.includes("blast galaxy")) {
+    return {
+      emoji: "🕹️",
+      title: `Challenge ${promptNumber}: Arcade champion`,
+      copy: "Pick one game. Winner gets route veto power for one snack or next-round decision.",
+    };
+  }
+  if (name.includes("poolbar") || name.includes("sportpark") || venue.tags.includes("games")) {
+    return {
+      emoji: "🎱",
+      title: `Challenge ${promptNumber}: Bar games captain`,
+      copy: "Nominate two players for a quick game. Everyone else must invent commentary like it is a final.",
+    };
+  }
+  if (name.includes("molly") || name.includes("mulligans")) {
+    return {
+      emoji: "☘️",
+      title: `Challenge ${promptNumber}: Pub-story round`,
+      copy: "Everyone shares a tiny travel story. Most suspiciously embellished one wins.",
+    };
+  }
+  if (venue.tags.includes("wine")) {
+    return {
+      emoji: "🍷",
+      title: `Challenge ${promptNumber}: Sommelier nonsense`,
+      copy: "Describe the first glass like a wine expert, but one word has to be completely ridiculous.",
+    };
+  }
+  if (venue.tags.includes("live-music")) {
+    return {
+      emoji: "🎷",
+      title: `Challenge ${promptNumber}: Setlist prophecy`,
+      copy: "Before the next song or playlist shift, everyone predicts the genre. Closest call gets bragging rights.",
+    };
+  }
+  if (venue.tags.includes("cocktails")) {
+    return {
+      emoji: "🍸",
+      title: `Challenge ${promptNumber}: Menu detective`,
+      copy: "Pick the drink with the best name, then guess two ingredients before anyone checks.",
+    };
+  }
+  if (venue.tags.includes("craft-beer")) {
+    return {
+      emoji: "🍺",
+      title: `Challenge ${promptNumber}: Tap-list gamble`,
+      copy: "Choose one beer by name alone. The group gets one collective guess at what style it is.",
+    };
+  }
+  if (venue.tags.includes("terrace")) {
+    return {
+      emoji: "🌤️",
+      title: `Challenge ${promptNumber}: Terrace scout`,
+      copy: "Spot the best table, the best dog, or the best overheard sentence. Majority vote decides.",
+    };
+  }
+  if (venue.tags.includes("hidden")) {
+    return {
+      emoji: "🗝️",
+      title: `Challenge ${promptNumber}: Hidden-gem proof`,
+      copy: "Find one detail that makes this place feel like a secret, then sell it to the group in ten seconds.",
+    };
+  }
+  if (venue.tags.includes("food")) {
+    return {
+      emoji: "🍽️",
+      title: `Challenge ${promptNumber}: Snack diplomacy`,
+      copy: "Order one thing the table can share, then appoint someone to give the first official review.",
+    };
+  }
+  return {
+    emoji: "🎯",
+    title: `Challenge ${promptNumber}: Vibe check`,
+    copy: fallback,
+  };
 }
 
 function emojiForVenue(venue) {
@@ -1721,12 +1837,14 @@ function buildShareParams(answers) {
   if (answers.includeMode !== "start") params.set("includeMode", answers.includeMode);
   if (answers.excludedBars.length) params.set("exclude", answers.excludedBars.join("|"));
   if (answers.removedBars.length) params.set("remove", answers.removedBars.join("|"));
+  if (answers.challenges) params.set("challenges", "1");
   return params;
 }
 
 function buildShareText(plan, answers, shareUrl) {
   const stops = plan.stops.map((stop) => `${formatHour(stop.startHour)} ${stop.venue.name}`).join(" -> ");
-  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}. Open it here: ${shareUrl}`;
+  const challengeText = answers.challenges ? " Challenges included." : "";
+  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}.${challengeText} Open it here: ${shareUrl}`;
 }
 
 function answersFromUrl() {
@@ -1749,6 +1867,7 @@ function answersFromUrl() {
     excludedBars: readExcludedBars(params.get("exclude") || ""),
     removedBars: readExcludedBars(params.get("remove") || ""),
     reservations: params.get("reservations") !== "0",
+    challenges: params.get("challenges") === "1",
   });
 }
 
@@ -1793,6 +1912,7 @@ function sanitizeAnswers(answers) {
     excludedBars: excludedBars.filter((name) => !removedBars.includes(name)),
     removedBars,
     reservations: Boolean(answers.reservations),
+    challenges: Boolean(answers.challenges),
   };
 }
 
@@ -1811,6 +1931,7 @@ function setFormAnswers(answers) {
   setRouteExclusions(answers.excludedBars);
   setRouteRemovals(answers.removedBars);
   form.elements.reservations.checked = answers.reservations;
+  form.elements.challenges.value = answers.challenges ? "yes" : "no";
 
   form.querySelectorAll('input[name="vibe"]').forEach((input) => {
     input.checked = answers.vibes.includes(input.value);
