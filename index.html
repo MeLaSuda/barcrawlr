@@ -83,6 +83,25 @@
             </div>
           </fieldset>
 
+          <fieldset class="choice-set">
+            <legend>Start from here</legend>
+            <div class="start-location-row">
+              <label class="field">
+                <span>Hotel, house, station, or area</span>
+                <input id="start-location" name="startLocation" type="search" placeholder="e.g. Hotel Jakarta, Jordaan, Amsterdam Centraal" autocomplete="street-address" />
+              </label>
+              <div class="start-tools">
+                <button id="find-start" class="secondary-action" type="button">Find start</button>
+                <button id="use-current-location" class="secondary-action" type="button">Use my location</button>
+              </div>
+            </div>
+            <p id="start-status" class="start-status" hidden></p>
+            <p class="helper-text">Routes can start from an address, a hotel, your current spot, or a neighbourhood.</p>
+            <input id="start-lat" name="startLat" type="hidden" value="" />
+            <input id="start-lng" name="startLng" type="hidden" value="" />
+            <input id="start-label" name="startLabel" type="hidden" value="" />
+          </fieldset>
+
           <div class="question-grid">
             <label class="field">
               <span>Preferred area</span>

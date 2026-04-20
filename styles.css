@@ -207,6 +207,41 @@ h3 {
   line-height: 1.4;
 }
 
+.start-location-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.start-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.start-tools .secondary-action {
+  min-height: 48px;
+  white-space: nowrap;
+}
+
+.start-status {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: #173323;
+  background: var(--mint);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.start-status.is-caution {
+  color: #3a1919;
+  background: #fff0f0;
+}
+
 .segmented,
 .chips {
   display: flex;
@@ -732,9 +767,18 @@ button.secondary-action {
   }
 
   .question-grid,
+  .start-location-row,
   .route-stats,
   .share-box {
     grid-template-columns: 1fr;
+  }
+
+  .start-tools {
+    justify-content: stretch;
+  }
+
+  .start-tools .secondary-action {
+    flex: 1 1 150px;
   }
 
   .share-actions {

@@ -1222,6 +1222,18 @@ const venues = [
 ];
 
 const publicSiteUrl = "https://melasuda.github.io/barcrawlr/";
+const amsterdamStartAnchors = [
+  { name: "Amsterdam Centraal", aliases: ["amsterdam centraal", "centraal", "central station", "station"], lat: 52.3789, lng: 4.9003 },
+  { name: "Centrum", aliases: ["centrum", "center", "centre", "dam", "red light", "nieuwmarkt"], lat: 52.3728, lng: 4.8956 },
+  { name: "Jordaan", aliases: ["jordaan"], lat: 52.3744, lng: 4.8816 },
+  { name: "Leidseplein", aliases: ["leidseplein"], lat: 52.3641, lng: 4.8837 },
+  { name: "De Pijp", aliases: ["de pijp", "pijp", "sarphatipark"], lat: 52.3548, lng: 4.8917 },
+  { name: "Oud-West", aliases: ["oud-west", "oud west", "kinkerstraat", "overtoom"], lat: 52.3674, lng: 4.8671 },
+  { name: "Westerpark", aliases: ["westerpark", "westergas"], lat: 52.3863, lng: 4.8736 },
+  { name: "Noord", aliases: ["noord", "north", "ndsm"], lat: 52.4002, lng: 4.8926 },
+  { name: "Oost", aliases: ["oost", "east", "oosterpark"], lat: 52.3616, lng: 4.9187 },
+  { name: "Schiphol", aliases: ["schiphol", "airport"], lat: 52.3105, lng: 4.7683 },
+];
 
 const form = document.querySelector("#crawl-form");
 const results = document.querySelector("#results");
@@ -1234,6 +1246,13 @@ const closeSourceDialogButton = document.querySelector("#close-source-dialog");
 const includeBarSelect = document.querySelector("#include-bar");
 const excludedBarsInput = document.querySelector("#excluded-bars");
 const removedBarsInput = document.querySelector("#removed-bars");
+const startLocationInput = document.querySelector("#start-location");
+const startLatInput = document.querySelector("#start-lat");
+const startLngInput = document.querySelector("#start-lng");
+const startLabelInput = document.querySelector("#start-label");
+const startStatus = document.querySelector("#start-status");
+const findStartButton = document.querySelector("#find-start");
+const currentLocationButton = document.querySelector("#use-current-location");
 let routeExclusions = [];
 let routeRemovals = [];
 
@@ -1254,8 +1273,23 @@ sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
 });
 
-form.addEventListener("submit", (event) => {
+findStartButton.addEventListener("click", () => {
+  resolveStartPoint();
+});
+
+currentLocationButton.addEventListener("click", () => {
+  useCurrentLocationStart();
+});
+
+startLocationInput.addEventListener("input", () => {
+  if (startLocationInput.value.trim() !== startLabelInput.value.trim()) {
+    clearStartPoint();
+  }
+});
+
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  await resolveStartPoint({ quietEmpty: true });
   const answers = readAnswers();
   const plan = buildPlan(answers);
   renderPlan(plan, answers, { syncUrl: true });
@@ -1321,6 +1355,10 @@ function readAnswers() {
     removedBars: mergedRemovedBars(data.get("removedBars") || ""),
     reservations: data.get("reservations") === "on",
     challenges: data.get("challenges") === "yes",
+    startLocation: data.get("startLocation") || "",
+    startLat: data.get("startLat") || "",
+    startLng: data.get("startLng") || "",
+    startLabel: data.get("startLabel") || "",
   });
 }
 
@@ -1335,6 +1373,7 @@ function buildPlan(answers) {
   const stopLength = isAllNight ? 46 : answers.pace === "relaxed" ? 62 : answers.pace === "lively" ? 44 : 52;
   const travelPad = isAllNight || answers.pace === "lively" ? 10 : 14;
   const budgetRank = { low: 1, medium: 2, high: 3 };
+  const startPoint = answers.startPoint;
 
   const scored = venues
     .filter((venue) => !answers.removedBars.includes(venue.name))
@@ -1360,10 +1399,12 @@ function buildPlan(answers) {
 
   const route = chooseRoute(scored, answers, day, startHour, stopCount);
   const scheduled = scheduleRoute(route, answers, stopLength, travelPad, day, startHour);
-  const totalWalk = scheduled.reduce((sum, stop, index) => {
+  const startWalk = startPoint && scheduled.length ? walkingMeters(startPoint, scheduled[0].venue) : 0;
+  const barWalk = scheduled.reduce((sum, stop, index) => {
     if (index === 0) return sum;
     return sum + walkingMeters(scheduled[index - 1].venue, stop.venue);
   }, 0);
+  const totalWalk = startWalk + barWalk;
 
   return {
     stops: scheduled,
@@ -1381,15 +1422,20 @@ function chooseRoute(scored, answers, day, startHour, stopCount) {
   const forcedItem = candidates.find((item) => item.venue.name === answers.includeBar);
   const preferredLeg = answers.walkLimit;
   const softLeg = answers.walkLimit === 600 ? 900 : answers.walkLimit === 1000 ? 1700 : 2400;
+  const startPoint = answers.startPoint;
   const first = forcedItem && answers.includeMode === "start"
     ? forcedItem.venue
     : candidates
         .map((item) => {
           const nearby = candidates.filter((other) => other.venue !== item.venue && walkingMeters(item.venue, other.venue) <= softLeg).length;
           const selectedAreaStart = answers.area !== "any" && item.venue.area === answers.area ? 22 : 0;
+          const startDistance = startPoint ? walkingMeters(startPoint, item.venue) : 0;
+          const startPenalty = startPoint
+            ? startDistance / 190 + (startDistance > softLeg ? 18 : startDistance > preferredLeg ? 6 : 0)
+            : 0;
           return {
             ...item,
-            routeScore: item.score + nearby * 1.6 + selectedAreaStart + (isOpenAt(item.venue, day, startHour) ? 3 : 0),
+            routeScore: item.score + nearby * 1.6 + selectedAreaStart + (isOpenAt(item.venue, day, startHour) ? 3 : 0) - startPenalty,
           };
         })
         .sort((a, b) => b.routeScore - a.routeScore)[0]?.venue;
@@ -1458,7 +1504,9 @@ function insertForcedVenue(route, forcedVenue, stopCount) {
 function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
   let current = startHour;
   return route.map((venue, index) => {
-    if (index > 0) {
+    if (index === 0 && answers.startPoint) {
+      current += walkingMinutes(answers.startPoint, venue) / 60;
+    } else if (index > 0) {
       const meters = walkingMeters(route[index - 1], venue);
       current += Math.max(8, Math.round((meters / 78 + travelPad) / 5) * 5) / 60;
     }
@@ -1485,7 +1533,7 @@ function renderPlan(plan, answers, options = {}) {
   emptyState.hidden = true;
   results.hidden = false;
 
-  const routeUrl = buildDirectionsUrl(plan.stops.map((stop) => stop.venue));
+  const routeUrl = buildDirectionsUrl(plan.stops.map((stop) => stop.venue), answers.startPoint);
   const shareUrl = buildShareUrl(answers);
   const shareText = buildShareText(plan, answers, shareUrl);
   const smsUrl = `sms:?body=${encodeURIComponent(shareText)}`;
@@ -1519,6 +1567,7 @@ function renderPlan(plan, answers, options = {}) {
         ${answers.vibes.slice(0, 4).map((vibe) => `<span class="pill">${labelFor(vibe)}</span>`).join("")}
         <span class="pill">${labelFor(answers.pace)} pace</span>
         <span class="pill">${answers.groupSize} ${answers.groupSize === 1 ? "person" : "people"}</span>
+        ${answers.startPoint ? `<span class="pill">Start ${escapeHtml(answers.startPoint.name)}</span>` : ""}
         ${answers.challenges ? `<span class="pill">Challenges on</span>` : ""}
         ${answers.includeBar ? `<span class="pill">Include ${escapeHtml(answers.includeBar)}</span>` : ""}
       </div>
@@ -1541,7 +1590,7 @@ function renderPlan(plan, answers, options = {}) {
     </article>
 
     <div class="venue-list">
-      ${plan.stops.map((stop, index) => renderStop(stop, index, plan.stops[index - 1], answers)).join("")}
+      ${plan.stops.map((stop, index) => renderStop(stop, index, index === 0 ? answers.startPoint : plan.stops[index - 1]?.venue, answers)).join("")}
     </div>
     ${warnings.length ? `<div class="warning">${escapeHtml(warnings.join(" "))}</div>` : ""}
   `;
@@ -1551,10 +1600,10 @@ function renderPlan(plan, answers, options = {}) {
   }
 }
 
-function renderStop(stop, index, previousStop, answers) {
+function renderStop(stop, index, previousPoint, answers) {
   const venue = stop.venue;
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.address)}`;
-  const leg = previousStop ? renderLeg(previousStop.venue, venue) : "";
+  const leg = previousPoint ? renderLeg(previousPoint, venue, index === 0 && answers.startPoint ? `From ${answers.startPoint.name}` : "Walk to next venue") : "";
   const warning = warningFor(stop, answers);
   const challenge = answers.challenges ? challengeForVenue(venue, index) : null;
 
@@ -1720,13 +1769,14 @@ function emojiForVenue(venue) {
   return "🍻";
 }
 
-function renderLeg(from, to) {
+function renderLeg(from, to, label = "Walk to next venue") {
   const meters = walkingMeters(from, to);
-  const minutes = Math.max(4, Math.round(meters / 78));
+  const minutes = walkingMinutes(from, to);
+  const prefix = label === "Walk to next venue" ? "" : `${label}: `;
   return `
-    <div class="leg" aria-label="Walk to next venue">
+    <div class="leg" aria-label="${escapeHtml(label)}">
       <div class="leg-line"></div>
-      <div>${minutes} min walk, about ${formatDistance(meters)}</div>
+      <div>${escapeHtml(prefix)}${minutes} min walk, about ${formatDistance(meters)}</div>
     </div>
   `;
 }
@@ -1838,13 +1888,19 @@ function buildShareParams(answers) {
   if (answers.excludedBars.length) params.set("exclude", answers.excludedBars.join("|"));
   if (answers.removedBars.length) params.set("remove", answers.removedBars.join("|"));
   if (answers.challenges) params.set("challenges", "1");
+  if (answers.startPoint) {
+    params.set("origin", answers.startPoint.name);
+    params.set("originLat", String(roundCoord(answers.startPoint.lat)));
+    params.set("originLng", String(roundCoord(answers.startPoint.lng)));
+  }
   return params;
 }
 
 function buildShareText(plan, answers, shareUrl) {
   const stops = plan.stops.map((stop) => `${formatHour(stop.startHour)} ${stop.venue.name}`).join(" -> ");
   const challengeText = answers.challenges ? " Challenges included." : "";
-  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}.${challengeText} Open it here: ${shareUrl}`;
+  const startText = answers.startPoint ? ` Starting from ${answers.startPoint.name}.` : "";
+  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}.${startText}${challengeText} Open it here: ${shareUrl}`;
 }
 
 function answersFromUrl() {
@@ -1868,6 +1924,10 @@ function answersFromUrl() {
     removedBars: readExcludedBars(params.get("remove") || ""),
     reservations: params.get("reservations") !== "0",
     challenges: params.get("challenges") === "1",
+    startLocation: params.get("origin") || "",
+    startLabel: params.get("origin") || "",
+    startLat: params.get("originLat") || "",
+    startLng: params.get("originLng") || "",
   });
 }
 
@@ -1887,6 +1947,7 @@ function sanitizeAnswers(answers) {
   const walkValue = String(answers.walkLimit);
   const cleanVibes = answers.vibes.filter((vibe) => allowed.vibes.includes(vibe));
   const includeBar = validVenueName(answers.includeBar || "");
+  const startPoint = sanitizeStartPoint(answers);
   const excludedBars = (answers.excludedBars || [])
     .map(validVenueName)
     .filter(Boolean)
@@ -1913,6 +1974,8 @@ function sanitizeAnswers(answers) {
     removedBars,
     reservations: Boolean(answers.reservations),
     challenges: Boolean(answers.challenges),
+    startLocation: startPoint?.name || String(answers.startLocation || "").trim().slice(0, 90),
+    startPoint,
   };
 }
 
@@ -1928,6 +1991,11 @@ function setFormAnswers(answers) {
   form.elements.walkLimit.value = answers.walkLimit;
   form.elements.includeBar.value = answers.includeBar;
   form.elements.includeMode.value = answers.includeMode;
+  form.elements.startLocation.value = answers.startPoint?.name || answers.startLocation || "";
+  form.elements.startLat.value = answers.startPoint ? roundCoord(answers.startPoint.lat) : "";
+  form.elements.startLng.value = answers.startPoint ? roundCoord(answers.startPoint.lng) : "";
+  form.elements.startLabel.value = answers.startPoint?.name || "";
+  setStartStatus(answers.startPoint ? `Starting from ${answers.startPoint.name}.` : "");
   setRouteExclusions(answers.excludedBars);
   setRouteRemovals(answers.removedBars);
   form.elements.reservations.checked = answers.reservations;
@@ -1936,6 +2004,162 @@ function setFormAnswers(answers) {
   form.querySelectorAll('input[name="vibe"]').forEach((input) => {
     input.checked = answers.vibes.includes(input.value);
   });
+}
+
+function sanitizeStartPoint(answers) {
+  if (answers.startPoint && isUsableStartPoint(answers.startPoint)) {
+    return {
+      name: String(answers.startPoint.name || "Starting point").trim().slice(0, 90),
+      lat: Number(answers.startPoint.lat),
+      lng: Number(answers.startPoint.lng),
+    };
+  }
+
+  const lat = Number(answers.startLat);
+  const lng = Number(answers.startLng);
+  const name = String(answers.startLabel || answers.startLocation || "").trim().slice(0, 90);
+  if (!name || !isAmsterdamish(lat, lng)) return null;
+
+  return { name, lat, lng };
+}
+
+function isUsableStartPoint(point) {
+  return point && String(point.name || "").trim() && isAmsterdamish(Number(point.lat), Number(point.lng));
+}
+
+function isAmsterdamish(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= 52.24 && lat <= 52.45 && lng >= 4.65 && lng <= 5.1;
+}
+
+async function resolveStartPoint(options = {}) {
+  const query = startLocationInput.value.trim();
+  if (!query) {
+    clearStartPoint();
+    return null;
+  }
+
+  if (startLabelInput.value.trim() === query && isAmsterdamish(Number(startLatInput.value), Number(startLngInput.value))) {
+    return sanitizeStartPoint({
+      startLabel: startLabelInput.value,
+      startLat: startLatInput.value,
+      startLng: startLngInput.value,
+    });
+  }
+
+  const localPoint = localStartPointFor(query);
+  if (localPoint) {
+    setStartPoint(localPoint);
+    return localPoint;
+  }
+
+  setStartStatus("Looking up that starting point...");
+  try {
+    const point = await geocodeAmsterdamStart(query);
+    if (point) {
+      setStartPoint(point);
+      return point;
+    }
+    setStartStatus("Could not find that start. The route will still work without it.", true);
+  } catch {
+    setStartStatus("Could not search right now. The route will still work without it.", true);
+  }
+
+  clearStartCoords();
+  return null;
+}
+
+function localStartPointFor(query) {
+  const cleaned = query.toLowerCase().trim();
+  const venueMatch = venues.find((venue) => venue.name.toLowerCase() === cleaned);
+  if (venueMatch) {
+    return {
+      name: venueMatch.name,
+      lat: venueMatch.lat,
+      lng: venueMatch.lng,
+    };
+  }
+
+  const anchor = amsterdamStartAnchors.find((item) => item.aliases.some((alias) => cleaned.includes(alias)));
+  return anchor ? { name: anchor.name, lat: anchor.lat, lng: anchor.lng } : null;
+}
+
+async function geocodeAmsterdamStart(query) {
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    limit: "1",
+    q: `${query}, Amsterdam, Netherlands`,
+    viewbox: "4.65,52.45,5.1,52.24",
+    bounded: "1",
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) return null;
+
+  const [result] = await response.json();
+  if (!result) return null;
+
+  const lat = Number(result.lat);
+  const lng = Number(result.lon);
+  if (!isAmsterdamish(lat, lng)) return null;
+
+  return {
+    name: startLocationInput.value.trim().slice(0, 90) || "Starting point",
+    lat,
+    lng,
+  };
+}
+
+function useCurrentLocationStart() {
+  if (!navigator.geolocation) {
+    setStartStatus("Location is not available in this browser.", true);
+    return;
+  }
+
+  setStartStatus("Finding your current location...");
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const point = {
+        name: "Current location",
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      };
+      if (!isAmsterdamish(point.lat, point.lng)) {
+        setStartStatus("That location looks outside Amsterdam. Add a hotel or area instead.", true);
+        return;
+      }
+      setStartPoint(point);
+    },
+    () => {
+      setStartStatus("Could not use your location. Add a hotel or area instead.", true);
+    },
+    { enableHighAccuracy: true, timeout: 9000, maximumAge: 120000 },
+  );
+}
+
+function setStartPoint(point) {
+  startLocationInput.value = point.name;
+  startLatInput.value = roundCoord(point.lat);
+  startLngInput.value = roundCoord(point.lng);
+  startLabelInput.value = point.name;
+  setStartStatus(`Starting from ${point.name}.`);
+}
+
+function clearStartPoint() {
+  clearStartCoords();
+  setStartStatus("");
+}
+
+function clearStartCoords() {
+  startLatInput.value = "";
+  startLngInput.value = "";
+  startLabelInput.value = "";
+}
+
+function setStartStatus(message, isCaution = false) {
+  startStatus.hidden = !message;
+  startStatus.textContent = message;
+  startStatus.classList.toggle("is-caution", Boolean(isCaution));
 }
 
 function readExcludedBars(value) {
@@ -2135,6 +2359,10 @@ function walkingMeters(a, b) {
   return Math.round(km * 1240);
 }
 
+function walkingMinutes(a, b) {
+  return Math.max(4, Math.round(walkingMeters(a, b) / 78));
+}
+
 function haversineKm(lat1, lon1, lat2, lon2) {
   const radius = 6371;
   const dLat = toRad(lat2 - lat1);
@@ -2149,13 +2377,22 @@ function toRad(value) {
   return (value * Math.PI) / 180;
 }
 
-function buildDirectionsUrl(route) {
+function buildDirectionsUrl(route, startPoint = null) {
   if (route.length < 2) {
+    if (startPoint && route[0]) {
+      const params = new URLSearchParams({
+        api: "1",
+        travelmode: "walking",
+        origin: mapsPoint(startPoint),
+        destination: route[0].address,
+      });
+      return `https://www.google.com/maps/dir/?${params.toString()}`;
+    }
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(route[0]?.address || "Amsterdam bars")}`;
   }
-  const origin = route[0].address;
+  const origin = startPoint ? mapsPoint(startPoint) : route[0].address;
   const destination = route[route.length - 1].address;
-  const waypoints = route.slice(1, -1).map((venue) => venue.address).join("|");
+  const waypoints = (startPoint ? route.slice(0, -1) : route.slice(1, -1)).map((venue) => venue.address).join("|");
   const params = new URLSearchParams({
     api: "1",
     travelmode: "walking",
@@ -2164,6 +2401,14 @@ function buildDirectionsUrl(route) {
   });
   if (waypoints) params.set("waypoints", waypoints);
   return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function mapsPoint(point) {
+  return `${roundCoord(point.lat)},${roundCoord(point.lng)}`;
+}
+
+function roundCoord(value) {
+  return Math.round(Number(value) * 1000000) / 1000000;
 }
 
 function getAmsterdamDay(dateString) {
