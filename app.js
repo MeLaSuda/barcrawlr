@@ -10,7 +10,7 @@ const venueSources = [
   { label: "Door 74", url: "https://www.diffordsguide.com/pubs-and-bars/657/amsterdam/door-74" },
 ];
 
-const venues = [
+const seededVenues = [
   {
     name: "Proeflokaal Arendsnest",
     area: "Centrum",
@@ -1238,27 +1238,62 @@ const amsterdamStartAnchors = [
 const form = document.querySelector("#crawl-form");
 const results = document.querySelector("#results");
 const emptyState = document.querySelector("#empty-state");
+const loadingState = document.querySelector("#loading-state");
+const loadingPun = document.querySelector("#loading-pun");
 const dateInput = document.querySelector("#crawl-date");
 const sourceLinks = document.querySelector("#source-links");
+const sourceDialogTitle = document.querySelector("#source-dialog-title");
 const sourceDialog = document.querySelector("#source-dialog");
 const openSourceDialogButton = document.querySelector("#open-source-dialog");
 const closeSourceDialogButton = document.querySelector("#close-source-dialog");
+const areaSelect = document.querySelector("select#area");
 const includeBarSelect = document.querySelector("#include-bar");
 const excludedBarsInput = document.querySelector("#excluded-bars");
 const removedBarsInput = document.querySelector("#removed-bars");
 const startLocationInput = document.querySelector("#start-location");
+const startSuggestions = document.querySelector("#start-suggestions");
 const startLatInput = document.querySelector("#start-lat");
 const startLngInput = document.querySelector("#start-lng");
 const startLabelInput = document.querySelector("#start-label");
 const startStatus = document.querySelector("#start-status");
 const findStartButton = document.querySelector("#find-start");
 const currentLocationButton = document.querySelector("#use-current-location");
+const formSteps = Array.from(document.querySelectorAll(".form-step"));
+const stepChips = Array.from(document.querySelectorAll("[data-step-jump]"));
+const stepBackButton = document.querySelector("#step-back");
+const stepNextButton = document.querySelector("#step-next");
+const buildCrawlButton = document.querySelector("#build-crawl");
 let routeExclusions = [];
 let routeRemovals = [];
+let activeVenues = seededVenues.slice();
+let activeLocationLabel = "Nearby";
+const venueDiscoveryCache = new Map();
+const startSuggestionCache = new Map();
+let currentStep = 0;
+let startSuggestionItems = [];
+let startSuggestionTimer = 0;
+let loadingPunTimer = 0;
+let loadingPunIndex = 0;
+let activeStartSearchToken = 0;
+let startSearchController = null;
+const completedSteps = new Set();
+
+const loadingPuns = [
+  "We are lining up a route with good pours and bad decisions.",
+  "Just giving your night a quick pub-lish.",
+  "Finding bars that suit your taste without lager-ging behind.",
+  "We are stout here doing the important work.",
+  "Putting the crawl together one happy hour at a time.",
+  "Checking the local pour-scape for maximum pub appeal.",
+  "Brewing up a route with a decent chance of becoming a story.",
+];
 
 dateInput.value = todayValue();
+renderLocationContext();
+renderAreaOptions();
 renderSourceLinks();
 renderVenueOptions();
+setPlannerStep(0);
 restoreSharedPlan();
 
 openSourceDialogButton.addEventListener("click", () => {
@@ -1273,8 +1308,8 @@ sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
 });
 
-findStartButton.addEventListener("click", () => {
-  resolveStartPoint();
+findStartButton.addEventListener("click", async () => {
+  await resolveStartPoint({ requireSelection: true });
 });
 
 currentLocationButton.addEventListener("click", () => {
@@ -1285,14 +1320,74 @@ startLocationInput.addEventListener("input", () => {
   if (startLocationInput.value.trim() !== startLabelInput.value.trim()) {
     clearStartPoint();
   }
+  queueStartSuggestionLookup();
+  updateStepMeter();
+});
+
+startLocationInput.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  await resolveStartPoint({ requireSelection: true });
+});
+
+startSuggestions.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-start-suggestion]");
+  if (!button) return;
+  const suggestion = startSuggestionItems.find((item) => item.key === button.dataset.startSuggestion);
+  if (!suggestion) return;
+  await selectStartSuggestion(suggestion);
+});
+
+form.addEventListener("input", (event) => {
+  const target = event.target;
+  if (!target || !("name" in target)) return;
+  updateStepMeter();
+});
+
+form.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!target || !("name" in target)) return;
+  updateStepMeter();
+});
+
+stepChips.forEach((chip) => {
+  chip.addEventListener("click", async () => {
+    const target = Number(chip.dataset.stepJump);
+    if (!Number.isInteger(target)) return;
+    if (target > currentStep) {
+      const ready = await validateStepTransition(currentStep);
+      if (!ready) return;
+      completedSteps.add(currentStep);
+    }
+    setPlannerStep(target);
+  });
+});
+
+stepBackButton.addEventListener("click", () => {
+  setPlannerStep(currentStep - 1);
+});
+
+stepNextButton.addEventListener("click", async () => {
+  const ready = await validateStepTransition(currentStep);
+  if (!ready) return;
+  completedSteps.add(currentStep);
+  setPlannerStep(currentStep + 1);
 });
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await resolveStartPoint({ quietEmpty: true });
-  const answers = readAnswers();
-  const plan = buildPlan(answers);
-  renderPlan(plan, answers, { syncUrl: true });
+  const ready = await validateStepTransition(currentStep, { final: true });
+  if (!ready) return;
+  setBuildLoading(true);
+  let answers = readAnswers();
+  try {
+    await ensureVenueDiscovery(answers);
+    answers = readAnswers();
+    const plan = buildPlan(answers);
+    renderPlan(plan, answers, { syncUrl: true });
+  } finally {
+    setBuildLoading(false);
+  }
 });
 
 results.addEventListener("click", async (event) => {
@@ -1329,6 +1424,399 @@ results.addEventListener("click", async (event) => {
   }, 1800);
 });
 
+function setPlannerStep(stepIndex) {
+  currentStep = clamp(stepIndex, 0, formSteps.length - 1);
+  formSteps.forEach((step, index) => {
+    const active = index === currentStep;
+    step.hidden = !active;
+    step.classList.toggle("is-active", active);
+  });
+  updateStepMeter();
+  stepBackButton.hidden = currentStep === 0;
+  stepNextButton.hidden = currentStep === formSteps.length - 1;
+  buildCrawlButton.hidden = currentStep !== formSteps.length - 1;
+  syncStepActionState();
+}
+
+function updateStepMeter() {
+  stepChips.forEach((chip, index) => {
+    const isActive = index === currentStep;
+    const isComplete = completedSteps.has(index);
+    const number = chip.dataset.stepJump ? String(Number(chip.dataset.stepJump) + 1) : "";
+    const numberNode = chip.querySelector(".step-chip-number");
+    chip.classList.toggle("is-active", isActive);
+    chip.classList.toggle("is-complete", isComplete);
+    if (numberNode) {
+      numberNode.textContent = isComplete ? "🍺" : number;
+      numberNode.setAttribute("aria-label", isComplete ? "Completed" : `Step ${number}`);
+    }
+  });
+  syncStepActionState();
+}
+
+function syncStepActionState() {
+  if (currentStep === 0) {
+    stepNextButton.disabled = !startLocationInput.value.trim();
+    return;
+  }
+
+  stepNextButton.disabled = false;
+}
+
+function setBuildLoading(isLoading) {
+  if (isLoading) {
+    emptyState.hidden = true;
+    results.hidden = true;
+    loadingState.hidden = false;
+    loadingPunIndex = 0;
+    loadingPun.textContent = loadingPuns[loadingPunIndex];
+    clearInterval(loadingPunTimer);
+    loadingPunTimer = window.setInterval(() => {
+      loadingPunIndex = (loadingPunIndex + 1) % loadingPuns.length;
+      loadingPun.textContent = loadingPuns[loadingPunIndex];
+    }, 1800);
+    buildCrawlButton.disabled = true;
+    buildCrawlButton.textContent = "Building...";
+    return;
+  }
+
+  loadingState.hidden = true;
+  clearInterval(loadingPunTimer);
+  loadingPunTimer = 0;
+  buildCrawlButton.disabled = false;
+  buildCrawlButton.textContent = "Build my crawl";
+}
+
+async function validateStepTransition(stepIndex, options = {}) {
+  if (stepIndex !== 0) return true;
+  if (!startLocationInput.value.trim()) {
+    setStartStatus("Add a starting point first so we can search nearby bars.", true);
+    return false;
+  }
+  const point = await resolveStartPoint({
+    requireSelection: true,
+    quietEmpty: true,
+    keepSuggestionsOpen: true,
+  });
+  return Boolean(point || sanitizeStartPoint(readAnswers()));
+}
+
+function queueStartSuggestionLookup() {
+  const query = startLocationInput.value.trim();
+  clearTimeout(startSuggestionTimer);
+  if (query.length < 3) {
+    clearStartSuggestions();
+    if (!startLabelInput.value.trim()) setStartStatus("");
+    return;
+  }
+  startSuggestionTimer = window.setTimeout(() => {
+    const local = localStartSuggestions(query);
+    renderStartSuggestions(local);
+  }, 180);
+}
+
+function clearStartSuggestions() {
+  startSuggestionItems = [];
+  startSuggestions.hidden = true;
+  startSuggestions.innerHTML = "";
+}
+
+function renderStartSuggestions(items) {
+  startSuggestionItems = items;
+  if (!items.length) {
+    clearStartSuggestions();
+    return;
+  }
+
+  startSuggestions.innerHTML = items
+    .map(
+      (item) => `
+        <button
+          class="start-suggestion${startLabelInput.value.trim() === item.name ? " is-selected" : ""}"
+          type="button"
+          role="option"
+          data-start-suggestion="${escapeHtml(item.key)}"
+          aria-selected="${startLabelInput.value.trim() === item.name ? "true" : "false"}"
+        >
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${escapeHtml(item.subtitle)}</span>
+        </button>
+      `,
+    )
+    .join("");
+  startSuggestions.hidden = false;
+}
+
+async function lookupStartSuggestions(query, options = {}) {
+  const cleaned = query.trim();
+  if (cleaned.length < 3) {
+    clearStartSuggestions();
+    return [];
+  }
+
+  const searchToken = ++activeStartSearchToken;
+  if (startSearchController) startSearchController.abort();
+  startSearchController = new AbortController();
+
+  const cacheKey = cleaned.toLowerCase();
+  if (startSuggestionCache.has(cacheKey)) {
+    const cached = startSuggestionCache.get(cacheKey);
+    if (searchToken === activeStartSearchToken) {
+      renderStartSuggestions(cached);
+      if (!options.background) {
+        setStartStatus(cached.length ? "Pick a starting point for the crawl." : `No strong matches for "${cleaned}" yet.`);
+      }
+    }
+    return cached;
+  }
+
+  setStartLookupBusy(true);
+  if (!options.background) setStartStatus(`Searching for "${cleaned}"...`);
+  try {
+    const [local, remote] = await Promise.all([
+      Promise.resolve(localStartSuggestions(cleaned)),
+      searchStartSuggestions(cleaned, { signal: startSearchController.signal }),
+    ]);
+    if (searchToken !== activeStartSearchToken) return [];
+    const suggestions = rerankStartSuggestions([...local, ...remote], cleaned);
+    startSuggestionCache.set(cacheKey, suggestions);
+    renderStartSuggestions(suggestions);
+    if (!suggestions.length) {
+      setStartStatus(`Could not lock in "${cleaned}" yet. Try the full hotel, station, or area name.`, true);
+    } else if (!options.background) {
+      setStartStatus(suggestions.length === 1 ? `Found ${suggestions[0].name}.` : "Pick a starting point for the crawl.");
+    }
+    return suggestions;
+  } catch (error) {
+    if (error?.name === "AbortError") return [];
+    setStartStatus("Search is being flaky right now. Try Find start again.", true);
+    clearStartSuggestions();
+    return [];
+  } finally {
+    if (searchToken === activeStartSearchToken) {
+      setStartLookupBusy(false);
+    }
+  }
+}
+
+function setStartLookupBusy(isBusy) {
+  findStartButton.disabled = isBusy;
+  findStartButton.textContent = isBusy ? "Searching..." : "Find start";
+}
+
+function localStartSuggestions(query) {
+  const cleaned = query.toLowerCase();
+  const venueMatches = activeVenues
+    .filter((venue) => venue.name.toLowerCase().includes(cleaned) || venue.area.toLowerCase().includes(cleaned))
+    .slice(0, 3)
+    .map((venue) => ({
+      key: `venue:${venue.name.toLowerCase()}`,
+      name: venue.name,
+      lat: venue.lat,
+      lng: venue.lng,
+      subtitle: `${venue.area} · ${venue.address}`,
+      searchScore: startSuggestionMatchScore(`${venue.name} ${venue.area} ${venue.address}`, query) + 20,
+    }));
+
+  const areaMatches = amsterdamStartAnchors
+    .filter((anchor) => anchor.name.toLowerCase().includes(cleaned) || anchor.aliases.some((alias) => alias.includes(cleaned)))
+    .slice(0, 4)
+    .map((anchor) => ({
+      key: `anchor:${anchor.name.toLowerCase()}`,
+      name: anchor.name,
+      lat: anchor.lat,
+      lng: anchor.lng,
+      subtitle: "Known local starting area",
+      searchScore: startSuggestionMatchScore(`${anchor.name} ${anchor.aliases.join(" ")}`, query) + 16,
+    }));
+
+  return [...areaMatches, ...venueMatches];
+}
+
+async function searchStartSuggestions(query, options = {}) {
+  const queries = startQueryVariants(query);
+  const matches = [];
+
+  for (const variant of queries) {
+    const settled = await Promise.allSettled([
+      fetchNominatimSuggestions(variant, options),
+      fetchPhotonSuggestions(variant, options),
+    ]);
+    const nominatimResults = settled[0].status === "fulfilled" ? settled[0].value : [];
+    const photonResults = settled[1].status === "fulfilled" ? settled[1].value : [];
+
+    matches.push(
+      ...nominatimResults
+        .map((result, index) => normalizeStartSuggestion(result, `${variant}:${index}`, query))
+        .filter(Boolean),
+      ...photonResults
+        .map((result, index) => normalizePhotonSuggestion(result, `${variant}:photon:${index}`, query))
+        .filter(Boolean),
+    );
+
+    if (matches.length >= 10) break;
+  }
+
+  return rerankStartSuggestions(matches, query);
+}
+
+async function fetchNominatimSuggestions(query, options = {}) {
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    limit: "6",
+    addressdetails: "1",
+    namedetails: "1",
+    q: query,
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: { Accept: "application/json" },
+    signal: options.signal,
+  });
+  if (!response.ok) return [];
+  return response.json();
+}
+
+async function fetchPhotonSuggestions(query, options = {}) {
+  const params = new URLSearchParams({
+    q: query,
+    limit: "6",
+  });
+  const response = await fetch(`https://photon.komoot.io/api/?${params.toString()}`, {
+    headers: { Accept: "application/json" },
+    signal: options.signal,
+  });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return Array.isArray(payload?.features) ? payload.features : [];
+}
+
+function normalizeStartSuggestion(result, index, sourceQuery = "") {
+  const lat = Number(result.lat);
+  const lng = Number(result.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const parts = String(result.display_name || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const name = cleanLocationLabel(parts.slice(0, 2).join(", ") || result.name || "Starting area");
+  const subtitle = parts.slice(2).join(", ") || `${humanizePlaceType(result.type)} · ${humanizePlaceType(result.class)}`;
+
+  return {
+    key: `remote:${index}:${roundCoord(lat)}:${roundCoord(lng)}`,
+    name,
+    lat,
+    lng,
+    subtitle: subtitle.slice(0, 120),
+    searchScore: startSuggestionMatchScore(`${name} ${result.display_name || ""}`, sourceQuery),
+  };
+}
+
+function normalizePhotonSuggestion(feature, index, sourceQuery = "") {
+  const coords = Array.isArray(feature?.geometry?.coordinates) ? feature.geometry.coordinates : [];
+  const [lng, lat] = coords.map(Number);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const props = feature.properties || {};
+  const titleParts = [props.name, props.street, props.housenumber].filter(Boolean);
+  const name = cleanLocationLabel(titleParts.join(" ") || props.name || props.city || props.state || "Starting area");
+  const subtitleParts = [props.district, props.city, props.country].filter(Boolean);
+  const subtitle = subtitleParts.join(", ") || humanizePlaceType(props.osm_value || props.type || "place");
+
+  return {
+    key: `photon:${index}:${roundCoord(lat)}:${roundCoord(lng)}`,
+    name,
+    lat,
+    lng,
+    subtitle: subtitle.slice(0, 120),
+    searchScore: startSuggestionMatchScore(`${name} ${subtitle} ${props.name || ""}`, sourceQuery) + 6,
+  };
+}
+
+function dedupeStartSuggestions(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${item.name.toLowerCase()}|${roundCoord(item.lat)}|${roundCoord(item.lng)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function startQueryVariants(query) {
+  const base = cleanSearchQuery(query);
+  const repaired = repairLocationTypos(base);
+  const variants = [
+    base,
+    repaired,
+    repaired.includes("hotel") ? repaired : `${repaired} hotel`,
+    repaired.includes("the ") ? repaired : `the ${repaired}`,
+  ]
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(variants));
+}
+
+function cleanSearchQuery(value) {
+  return String(value || "")
+    .replace(/[’']/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function repairLocationTypos(value) {
+  return cleanSearchQuery(value)
+    .replace(/\bshepards\b/gi, "shepherd's")
+    .replace(/\bshepherds\b/gi, "shepherd's")
+    .replace(/\bcental\b/gi, "central")
+    .replace(/\bstn\b/gi, "station");
+}
+
+function rerankStartSuggestions(items, query) {
+  return dedupeStartSuggestions(items)
+    .sort((a, b) => (b.searchScore || 0) - (a.searchScore || 0))
+    .slice(0, 7);
+}
+
+function startSuggestionMatchScore(text, query) {
+  const haystack = normalizeSearchText(text);
+  const needle = normalizeSearchText(repairLocationTypos(query));
+  if (!needle) return 0;
+
+  let score = 0;
+  if (haystack.includes(needle)) score += 80;
+
+  const needleTokens = needle.split(" ").filter(Boolean);
+  const haystackTokens = haystack.split(" ").filter(Boolean);
+  score += needleTokens.reduce((sum, token) => {
+    if (haystackTokens.some((candidate) => candidate === token)) return sum + 12;
+    if (haystackTokens.some((candidate) => candidate.startsWith(token) || token.startsWith(candidate))) return sum + 6;
+    return sum;
+  }, 0);
+
+  return score;
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function selectStartSuggestion(suggestion) {
+  setStartPoint({
+    name: suggestion.name,
+    lat: suggestion.lat,
+    lng: suggestion.lng,
+  });
+  await ensureVenueDiscovery(readAnswers());
+}
+
 function allDays(defaultRanges, overrides = {}) {
   return [0, 1, 2, 3, 4, 5, 6].reduce((hours, day) => {
     hours[day] = overrides[day] || defaultRanges;
@@ -1359,6 +1847,7 @@ function readAnswers() {
     startLat: data.get("startLat") || "",
     startLng: data.get("startLng") || "",
     startLabel: data.get("startLabel") || "",
+    loopToStart: data.get("loopToStart") === "on",
   });
 }
 
@@ -1375,7 +1864,7 @@ function buildPlan(answers) {
   const budgetRank = { low: 1, medium: 2, high: 3 };
   const startPoint = answers.startPoint;
 
-  const scored = venues
+  const scored = activeVenues
     .filter((venue) => !answers.removedBars.includes(venue.name))
     .filter((venue) => !answers.excludedBars.includes(venue.name) || venue.name === answers.includeBar)
     .map((venue) => {
@@ -1404,14 +1893,19 @@ function buildPlan(answers) {
     if (index === 0) return sum;
     return sum + walkingMeters(scheduled[index - 1].venue, stop.venue);
   }, 0);
-  const totalWalk = startWalk + barWalk;
+  const returnWalk = answers.loopToStart && startPoint && scheduled.length ? walkingMeters(scheduled[scheduled.length - 1].venue, startPoint) : 0;
+  const totalWalk = startWalk + barWalk + returnWalk;
+  const endHour = scheduled.length
+    ? scheduled[scheduled.length - 1].endHour + (answers.loopToStart && startPoint ? walkingMinutes(scheduled[scheduled.length - 1].venue, startPoint) / 60 : 0)
+    : startHour + (isAllNight ? 4 : answers.duration);
 
   return {
     stops: scheduled,
     totalWalk,
     stopCount: scheduled.length,
     day,
-    endHour: scheduled.length ? scheduled[scheduled.length - 1].endHour : startHour + answers.duration,
+    endHour,
+    returnToStart: answers.loopToStart && startPoint && scheduled.length ? { from: scheduled[scheduled.length - 1].venue, to: startPoint } : null,
     routeName: routeNameFor(answers, scheduled),
   };
 }
@@ -1528,12 +2022,23 @@ function scheduleRoute(route, answers, stopLength, travelPad, day, startHour) {
 
 function renderPlan(plan, answers, options = {}) {
   answers = sanitizeAnswers({ vibes: [], excludedBars: [], removedBars: [], ...answers });
+  setBuildLoading(false);
   setRouteExclusions(answers.excludedBars);
   setRouteRemovals(answers.removedBars);
   emptyState.hidden = true;
+  loadingState.hidden = true;
   results.hidden = false;
 
-  const routeUrl = buildDirectionsUrl(plan.stops.map((stop) => stop.venue), answers.startPoint);
+  if (!plan.stops.length) {
+    results.innerHTML = `
+      <div class="warning">
+        Could not find enough bars within 1 km of ${escapeHtml(answers.startPoint?.name || activeLocationLabel)}. Try a nearby centre point instead.
+      </div>
+    `;
+    return;
+  }
+
+  const routeUrl = buildDirectionsUrl(plan.stops.map((stop) => stop.venue), answers.startPoint, answers.loopToStart);
   const shareUrl = buildShareUrl(answers);
   const shareText = buildShareText(plan, answers, shareUrl);
   const smsUrl = `sms:?body=${encodeURIComponent(shareText)}`;
@@ -1568,6 +2073,7 @@ function renderPlan(plan, answers, options = {}) {
         <span class="pill">${labelFor(answers.pace)} pace</span>
         <span class="pill">${answers.groupSize} ${answers.groupSize === 1 ? "person" : "people"}</span>
         ${answers.startPoint ? `<span class="pill">Start ${escapeHtml(answers.startPoint.name)}</span>` : ""}
+        ${answers.loopToStart && answers.startPoint ? `<span class="pill">Loop to start</span>` : ""}
         ${answers.challenges ? `<span class="pill">Challenges on</span>` : ""}
         ${answers.includeBar ? `<span class="pill">Include ${escapeHtml(answers.includeBar)}</span>` : ""}
       </div>
@@ -1591,6 +2097,7 @@ function renderPlan(plan, answers, options = {}) {
 
     <div class="venue-list">
       ${plan.stops.map((stop, index) => renderStop(stop, index, index === 0 ? answers.startPoint : plan.stops[index - 1]?.venue, answers)).join("")}
+      ${plan.returnToStart ? renderLeg(plan.returnToStart.from, plan.returnToStart.to, `Back to ${plan.returnToStart.to.name}`) : ""}
     </div>
     ${warnings.length ? `<div class="warning">${escapeHtml(warnings.join(" "))}</div>` : ""}
   `;
@@ -1782,8 +2289,8 @@ function renderLeg(from, to, label = "Walk to next venue") {
 }
 
 function renderSourceLinks() {
-  openSourceDialogButton.textContent = `View ${venues.length} bars`;
-  sourceLinks.innerHTML = venues
+  openSourceDialogButton.textContent = `View ${activeVenues.length} bars`;
+  sourceLinks.innerHTML = activeVenues
     .map((venue) => ({ name: venue.name, url: venue.source.url }))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((venue) => `<a href="${venue.url}" target="_blank" rel="noreferrer">${escapeHtml(venue.name)}</a>`)
@@ -1791,14 +2298,32 @@ function renderSourceLinks() {
 }
 
 function renderVenueOptions() {
+  const selected = includeBarSelect.value;
+  includeBarSelect.innerHTML = '<option value="">No specific bar</option>';
   includeBarSelect.insertAdjacentHTML(
     "beforeend",
-    venues
+    activeVenues
       .map((venue) => venue.name)
       .sort((a, b) => a.localeCompare(b))
       .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
       .join(""),
   );
+  includeBarSelect.value = validVenueName(selected);
+}
+
+function renderAreaOptions() {
+  if (!areaSelect) return;
+  const selected = areaSelect.value;
+  const areas = Array.from(new Set(activeVenues.map((venue) => venue.area).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  areaSelect.innerHTML = [
+    '<option value="any">Best fit</option>',
+    ...areas.map((area) => `<option value="${escapeHtml(area)}">${escapeHtml(area)}</option>`),
+  ].join("");
+  areaSelect.value = areas.includes(selected) || selected === "any" ? selected : "any";
+}
+
+function renderLocationContext() {
+  sourceDialogTitle.textContent = `Bars BarCrawlr found near ${activeLocationLabel}`;
 }
 
 function renderExcludedNotice(answers) {
@@ -1811,6 +2336,260 @@ function renderExcludedNotice(answers) {
       <button class="text-action" type="button" data-clear-excluded>Clear edits</button>
     </div>
   `;
+}
+
+async function ensureVenueDiscovery(answers) {
+  answers = sanitizeAnswers({ vibes: [], excludedBars: [], removedBars: [], ...answers });
+
+  if (!answers.startPoint) {
+    const label = cleanLocationLabel(answers.startLocation || activeLocationLabel || "your start point");
+    setActiveVenueContext([], label);
+    setStartStatus("Choose a starting point first so we can search within 1 km.", true);
+    return activeVenues;
+  }
+
+  const cacheKey = `${roundCoord(answers.startPoint.lat)},${roundCoord(answers.startPoint.lng)}`;
+  const cached = venueDiscoveryCache.get(cacheKey);
+  if (cached) {
+    setActiveVenueContext(cached.venues, cached.label);
+    return activeVenues;
+  }
+
+  setStartStatus(`Finding bars within 1 km of ${answers.startPoint.name}...`);
+  try {
+    const discovered = await discoverVenuesNearPoint(answers.startPoint, answers);
+    if (discovered.length) {
+      const label = cleanLocationLabel(answers.startPoint.name);
+      venueDiscoveryCache.set(cacheKey, { venues: discovered, label });
+      setActiveVenueContext(discovered, label);
+      setStartStatus(`Found ${discovered.length} bars within 1 km of ${label}.`);
+      return activeVenues;
+    }
+  } catch {
+    // Fall through to the fallback handling below.
+  }
+
+  setActiveVenueContext([], cleanLocationLabel(answers.startPoint.name));
+  setStartStatus(`Could not find enough bars within 1 km of ${answers.startPoint.name}. Try a nearby centre point instead.`, true);
+  return activeVenues;
+}
+
+function setActiveVenueContext(venues, label) {
+  activeVenues = [...venues];
+  activeLocationLabel = label;
+  renderLocationContext();
+  renderAreaOptions();
+  renderSourceLinks();
+  renderVenueOptions();
+}
+
+async function discoverVenuesNearPoint(point, answers) {
+  const discoveryRadius = 1000;
+  const batches = await fetchOverpassVenueBatch(point, discoveryRadius);
+
+  const deduped = Array.from(new Map(
+    batches
+      .map((element) => normalizeDiscoveredVenue(element, point))
+      .filter(Boolean)
+      .filter((venue) => walkingMeters(point, venue) <= discoveryRadius)
+      .map((venue) => [venue.name.toLowerCase(), venue]),
+  ).values());
+
+  return deduped
+    .sort((a, b) => venueDiscoveryScore(b, point) - venueDiscoveryScore(a, point))
+    .slice(0, 48);
+}
+
+async function fetchOverpassVenueBatch(point, radius) {
+  const query = `
+[out:json][timeout:25];
+(
+  nwr(around:${Math.round(radius)},${point.lat},${point.lng})["amenity"~"^(bar|pub|biergarten|nightclub)$"];
+  nwr(around:${Math.round(radius)},${point.lat},${point.lng})["craft"="brewery"];
+  nwr(around:${Math.round(radius)},${point.lat},${point.lng})["microbrewery"="yes"];
+  nwr(around:${Math.round(radius)},${point.lat},${point.lng})["leisure"~"^(bowling_alley|miniature_golf|amusement_arcade)$"];
+  nwr(around:${Math.round(radius)},${point.lat},${point.lng})["amenity"="cafe"]["name"~"bar|pub|wine|taproom|beer|brew|jazz|cocktail|billiard|pool",i];
+  nwr(around:${Math.round(radius)},${point.lat},${point.lng})["amenity"="cafe"]["opening_hours"~"00:|01:|02:|03:"];
+);
+out center tags;
+`.trim();
+
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=UTF-8",
+      Accept: "application/json",
+    },
+    body: query,
+  });
+
+  if (!response.ok) throw new Error("Overpass lookup failed");
+  const data = await response.json();
+  return data.elements || [];
+}
+
+function normalizeDiscoveredVenue(element, originPoint) {
+  const tags = element.tags || {};
+  const lat = Number(element.lat ?? element.center?.lat);
+  const lng = Number(element.lon ?? element.center?.lon);
+  const rawName = cleanVenueName(tags.name || tags.brand || "");
+  if (!rawName || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const discovery = inferDiscoveryShape(rawName, tags);
+  if (!discovery.isUsable) return null;
+
+  const parsedHours = parseOpeningHours(tags.opening_hours);
+  const hours = parsedHours || defaultHoursForTags(discovery.tags);
+  const price = inferVenuePrice(tags, discovery.tags);
+  const area = inferVenueArea(tags, originPoint);
+  const note = tags.opening_hours
+    ? "Live discovery from public map data. Check the venue page before you head out."
+    : "Live discovery from public map data. Opening hours are estimated, so check before you head out.";
+
+  return {
+    name: rawName,
+    area,
+    address: buildDiscoveredAddress(tags, lat, lng, area),
+    lat,
+    lng,
+    price,
+    tags: discovery.tags,
+    moods: inferVenueMoods(discovery.tags),
+    vibe: describeDiscoveredVenue(discovery.tags, area),
+    bestFor: bestForDiscoveredVenue(discovery.tags),
+    note,
+    hours,
+    hoursConfidence: parsedHours ? "parsed" : "estimated",
+    source: {
+      label: rawName,
+      url: tags.website || tags["contact:website"] || osmElementUrl(element),
+    },
+    needsBooking: tags.reservation === "yes" || tags.booking === "yes",
+    smallGroup: discovery.tags.includes("hidden") && !discovery.tags.includes("terrace"),
+  };
+}
+
+function inferDiscoveryShape(name, tags) {
+  const blob = `${name} ${Object.values(tags).join(" ")}`.toLowerCase();
+  const amenity = tags.amenity || "";
+  const leisure = tags.leisure || "";
+  const out = new Set();
+
+  if (amenity === "nightclub" || /cocktail|speakeasy|mixology|martini|rooftop/.test(blob)) out.add("cocktails");
+  if (amenity === "bar" && !/sports|pool/.test(blob)) out.add("cocktails");
+  if (/wine|vin|vino|enoteca|bodega/.test(blob)) out.add("wine");
+  if (tags.craft === "brewery" || tags.microbrewery === "yes" || /brew|beer|taproom|ale|ipa|lager/.test(blob)) out.add("craft-beer");
+  if (/pub|biergarten|tavern|irish|bar|beer|cafe/.test(blob) || amenity === "pub" || amenity === "biergarten") out.add("chill-beers");
+  if (tags.live_music === "yes" || /jazz|blues|music|vinyl|live/.test(blob)) out.add("live-music");
+  if (tags.outdoor_seating === "yes" || amenity === "biergarten" || /terrace|rooftop|garden/.test(blob)) out.add("terrace");
+  if (/speakeasy|hidden|secret|cellar|jenever/.test(blob)) out.add("hidden");
+  if (leisure === "bowling_alley") {
+    out.add("games");
+    out.add("bowling");
+  }
+  if (leisure === "miniature_golf" || leisure === "amusement_arcade" || /pool|billiard|arcade|bowling|golf|karaoke|game/.test(blob)) out.add("games");
+  if (tags.cuisine || amenity === "cafe" || amenity === "restaurant" || /kitchen|eatery|kitchen|snack|grill|brasserie/.test(blob)) out.add("food");
+  if (tags.opening_hours && /00:|01:|02:|03:|04:/.test(tags.opening_hours)) out.add("late-night");
+  if (amenity === "nightclub") out.add("late-night");
+
+  const looksBarLike = out.has("cocktails") || out.has("wine") || out.has("craft-beer") || out.has("chill-beers") || out.has("live-music") || out.has("games");
+  const isUsable = looksBarLike || amenity === "bar" || amenity === "pub" || amenity === "biergarten" || leisure === "bowling_alley";
+
+  if (!out.size && isUsable) out.add("chill-beers");
+
+  return { tags: Array.from(out), isUsable };
+}
+
+function inferVenueArea(tags, originPoint) {
+  return cleanLocationLabel(
+    tags.neighbourhood ||
+    tags.suburb ||
+    tags.quarter ||
+    tags["addr:suburb"] ||
+    tags.city_district ||
+    tags.borough ||
+    tags.town ||
+    tags.city ||
+    tags.village ||
+    nearestFallbackArea(originPoint)
+  );
+}
+
+function nearestFallbackArea(point) {
+  return isAmsterdamish(point.lat, point.lng) ? "Amsterdam" : "Nearby";
+}
+
+function buildDiscoveredAddress(tags, lat, lng, area) {
+  const parts = [
+    [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ").trim(),
+    tags["addr:postcode"],
+    tags["addr:city"] || tags.city || area,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : `${roundCoord(lat)}, ${roundCoord(lng)}`;
+}
+
+function inferVenuePrice(tags, venueTags) {
+  const blob = `${tags.price || ""} ${tags.fee || ""} ${tags.payment || ""}`.toLowerCase();
+  if (/\$\$\$|expensive|high/.test(blob)) return "high";
+  if (/\$|cheap|budget|no/.test(blob)) return "low";
+  if (venueTags.includes("wine") || venueTags.includes("cocktails")) return "medium";
+  return "medium";
+}
+
+function inferVenueMoods(tags) {
+  const moods = new Set(["friends", "visitors"]);
+  if (tags.includes("cocktails") || tags.includes("wine") || tags.includes("hidden")) moods.add("date");
+  if (tags.includes("terrace") || tags.includes("food") || tags.includes("chill-beers")) moods.add("work");
+  return Array.from(moods);
+}
+
+function describeDiscoveredVenue(tags, area) {
+  if (tags.includes("wine")) return `A wine-led stop around ${area}, better for slower drinks and conversation.`;
+  if (tags.includes("cocktails")) return `A cocktail-leaning stop around ${area}, good when the night wants sharper drinks and a bit more mood.`;
+  if (tags.includes("live-music")) return `A music-friendly stop around ${area}, useful when the route wants more movement and less sitting still.`;
+  if (tags.includes("craft-beer")) return `A beer-first stop around ${area}, easy for a group that wants range without too much theatre.`;
+  if (tags.includes("games")) return `An activity-friendly stop around ${area}, good when the crawl needs something to do as well as somewhere to drink.`;
+  return `A relaxed bar stop around ${area}, good for settling the group before the next move.`;
+}
+
+function bestForDiscoveredVenue(tags) {
+  if (tags.includes("wine")) return "A quieter round, small groups, and conversation that can actually survive the room.";
+  if (tags.includes("cocktails")) return "A deliberate drinks stop when one proper round beats two forgettable ones.";
+  if (tags.includes("live-music")) return "A later stop that can turn the crawl into more of a night out.";
+  if (tags.includes("craft-beer")) return "Beer people, mixed groups, and a first or second stop with easy momentum.";
+  if (tags.includes("games")) return "Breaking up the crawl with pool, bowling, mini golf, or arcade energy.";
+  if (tags.includes("terrace")) return "A daylight or early-evening round when sitting outside still matters.";
+  return "A simple, useful bar stop that keeps the route moving.";
+}
+
+function venueDiscoveryScore(venue, originPoint) {
+  let score = 0;
+  score += venue.tags.length * 10;
+  score += venue.tags.includes("late-night") ? 18 : 0;
+  score += venue.tags.includes("terrace") ? 7 : 0;
+  score += venue.tags.includes("food") ? 5 : 0;
+  score += venue.hoursConfidence === "parsed" ? 8 : 0;
+  score += venue.source.url.includes("openstreetmap.org") ? 0 : 8;
+  score -= walkingMeters(originPoint, venue) / 400;
+  return score;
+}
+
+function osmElementUrl(element) {
+  return `https://www.openstreetmap.org/${element.type}/${element.id}`;
+}
+
+function cleanVenueName(name) {
+  return String(name || "").replace(/\s+/g, " ").trim().slice(0, 90);
+}
+
+function cleanLocationLabel(value) {
+  return String(value || "").split(",")[0].replace(/\s+/g, " ").trim().slice(0, 40) || "Nearby";
+}
+
+function humanizePlaceType(value) {
+  return String(value || "area")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function replaceBarInRoute(name) {
@@ -1844,12 +2623,14 @@ function removeBarFromRoute(name) {
   renderPlan(buildPlan(nextAnswers), nextAnswers, { syncUrl: true });
 }
 
-function restoreSharedPlan() {
+async function restoreSharedPlan() {
   const answers = answersFromUrl();
   if (!answers) return;
 
-  setFormAnswers(answers);
-  renderPlan(buildPlan(answers), answers, { scroll: window.location.hash === "#itinerary" });
+  await ensureVenueDiscovery(answers);
+  const hydratedAnswers = sanitizeAnswers(answers);
+  setFormAnswers(hydratedAnswers);
+  renderPlan(buildPlan(hydratedAnswers), hydratedAnswers, { scroll: window.location.hash === "#itinerary" });
 }
 
 function buildShareUrl(answers) {
@@ -1888,6 +2669,7 @@ function buildShareParams(answers) {
   if (answers.excludedBars.length) params.set("exclude", answers.excludedBars.join("|"));
   if (answers.removedBars.length) params.set("remove", answers.removedBars.join("|"));
   if (answers.challenges) params.set("challenges", "1");
+  if (answers.loopToStart) params.set("loop", "1");
   if (answers.startPoint) {
     params.set("origin", answers.startPoint.name);
     params.set("originLat", String(roundCoord(answers.startPoint.lat)));
@@ -1900,7 +2682,8 @@ function buildShareText(plan, answers, shareUrl) {
   const stops = plan.stops.map((stop) => `${formatHour(stop.startHour)} ${stop.venue.name}`).join(" -> ");
   const challengeText = answers.challenges ? " Challenges included." : "";
   const startText = answers.startPoint ? ` Starting from ${answers.startPoint.name}.` : "";
-  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}.${startText}${challengeText} Open it here: ${shareUrl}`;
+  const loopText = answers.loopToStart && answers.startPoint ? " Looping back to the start." : "";
+  return `BarCrawlr itinerary for ${answers.crawlDate}: ${stops}.${startText}${loopText}${challengeText} Open it here: ${shareUrl}`;
 }
 
 function answersFromUrl() {
@@ -1924,6 +2707,7 @@ function answersFromUrl() {
     removedBars: readExcludedBars(params.get("remove") || ""),
     reservations: params.get("reservations") !== "0",
     challenges: params.get("challenges") === "1",
+    loopToStart: params.get("loop") === "1",
     startLocation: params.get("origin") || "",
     startLabel: params.get("origin") || "",
     startLat: params.get("originLat") || "",
@@ -1932,11 +2716,12 @@ function answersFromUrl() {
 }
 
 function sanitizeAnswers(answers) {
+  const allowedAreas = ["any", ...new Set(activeVenues.map((venue) => venue.area).filter(Boolean))];
   const allowed = {
     duration: ["3", "4", "5", "6", "all-night"],
     groupMood: ["friends", "date", "work", "visitors"],
     vibes: ["cocktails", "wine", "craft-beer", "chill-beers", "live-music", "terrace", "hidden", "late-night", "games"],
-    area: ["any", "Centrum", "Jordaan", "Leidseplein", "De Pijp", "Oud-West", "Westerpark", "Noord", "Oost"],
+    area: allowedAreas,
     budget: ["low", "medium", "high"],
     pace: ["relaxed", "balanced", "lively"],
     walkLimit: ["600", "1000", "1600"],
@@ -1974,6 +2759,7 @@ function sanitizeAnswers(answers) {
     removedBars,
     reservations: Boolean(answers.reservations),
     challenges: Boolean(answers.challenges),
+    loopToStart: Boolean(answers.loopToStart),
     startLocation: startPoint?.name || String(answers.startLocation || "").trim().slice(0, 90),
     startPoint,
   };
@@ -1984,7 +2770,9 @@ function setFormAnswers(answers) {
   form.elements.startTime.value = answers.startTime;
   form.elements.crawlDate.value = answers.crawlDate;
   form.elements.duration.value = answers.duration;
-  form.elements.groupMood.value = answers.groupMood;
+  form.querySelectorAll('input[name="groupMood"]').forEach((input) => {
+    input.checked = input.value === answers.groupMood;
+  });
   form.elements.area.value = answers.area;
   form.elements.budget.value = answers.budget;
   form.elements.pace.value = answers.pace;
@@ -1999,11 +2787,15 @@ function setFormAnswers(answers) {
   setRouteExclusions(answers.excludedBars);
   setRouteRemovals(answers.removedBars);
   form.elements.reservations.checked = answers.reservations;
-  form.elements.challenges.value = answers.challenges ? "yes" : "no";
+  form.querySelectorAll('input[name="challenges"]').forEach((input) => {
+    input.checked = input.value === (answers.challenges ? "yes" : "no");
+  });
+  form.elements.loopToStart.checked = answers.loopToStart;
 
   form.querySelectorAll('input[name="vibe"]').forEach((input) => {
     input.checked = answers.vibes.includes(input.value);
   });
+  updateStepMeter();
 }
 
 function sanitizeStartPoint(answers) {
@@ -2018,13 +2810,13 @@ function sanitizeStartPoint(answers) {
   const lat = Number(answers.startLat);
   const lng = Number(answers.startLng);
   const name = String(answers.startLabel || answers.startLocation || "").trim().slice(0, 90);
-  if (!name || !isAmsterdamish(lat, lng)) return null;
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
   return { name, lat, lng };
 }
 
 function isUsableStartPoint(point) {
-  return point && String(point.name || "").trim() && isAmsterdamish(Number(point.lat), Number(point.lng));
+  return point && String(point.name || "").trim() && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng));
 }
 
 function isAmsterdamish(lat, lng) {
@@ -2035,10 +2827,11 @@ async function resolveStartPoint(options = {}) {
   const query = startLocationInput.value.trim();
   if (!query) {
     clearStartPoint();
+    clearStartSuggestions();
     return null;
   }
 
-  if (startLabelInput.value.trim() === query && isAmsterdamish(Number(startLatInput.value), Number(startLngInput.value))) {
+  if (startLabelInput.value.trim() === query && isUsableStartPoint({ lat: Number(startLatInput.value), lng: Number(startLngInput.value), name: query })) {
     return sanitizeStartPoint({
       startLabel: startLabelInput.value,
       startLat: startLatInput.value,
@@ -2052,25 +2845,30 @@ async function resolveStartPoint(options = {}) {
     return localPoint;
   }
 
-  setStartStatus("Looking up that starting point...");
-  try {
-    const point = await geocodeAmsterdamStart(query);
-    if (point) {
-      setStartPoint(point);
-      return point;
-    }
-    setStartStatus("Could not find that start. The route will still work without it.", true);
-  } catch {
-    setStartStatus("Could not search right now. The route will still work without it.", true);
+  const suggestions = await lookupStartSuggestions(query);
+  if (!suggestions.length) {
+    clearStartCoords();
+    setStartStatus(`Could not find a starting point for "${query}". Try the full hotel, station, or area name.`, true);
+    return null;
   }
 
-  clearStartCoords();
+  const bestSuggestion = suggestions[0];
+  if (bestSuggestion) {
+    await selectStartSuggestion(bestSuggestion);
+    return bestSuggestion;
+  }
+
+  if (options.requireSelection) {
+    setStartStatus("Pick one of the suggested starting points below.");
+    return null;
+  }
+
   return null;
 }
 
 function localStartPointFor(query) {
   const cleaned = query.toLowerCase().trim();
-  const venueMatch = venues.find((venue) => venue.name.toLowerCase() === cleaned);
+  const venueMatch = activeVenues.find((venue) => venue.name.toLowerCase() === cleaned);
   if (venueMatch) {
     return {
       name: venueMatch.name,
@@ -2081,33 +2879,6 @@ function localStartPointFor(query) {
 
   const anchor = amsterdamStartAnchors.find((item) => item.aliases.some((alias) => cleaned.includes(alias)));
   return anchor ? { name: anchor.name, lat: anchor.lat, lng: anchor.lng } : null;
-}
-
-async function geocodeAmsterdamStart(query) {
-  const params = new URLSearchParams({
-    format: "jsonv2",
-    limit: "1",
-    q: `${query}, Amsterdam, Netherlands`,
-    viewbox: "4.65,52.45,5.1,52.24",
-    bounded: "1",
-  });
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) return null;
-
-  const [result] = await response.json();
-  if (!result) return null;
-
-  const lat = Number(result.lat);
-  const lng = Number(result.lon);
-  if (!isAmsterdamish(lat, lng)) return null;
-
-  return {
-    name: startLocationInput.value.trim().slice(0, 90) || "Starting point",
-    lat,
-    lng,
-  };
 }
 
 function useCurrentLocationStart() {
@@ -2124,14 +2895,11 @@ function useCurrentLocationStart() {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
       };
-      if (!isAmsterdamish(point.lat, point.lng)) {
-        setStartStatus("That location looks outside Amsterdam. Add a hotel or area instead.", true);
-        return;
-      }
       setStartPoint(point);
+      void ensureVenueDiscovery(readAnswers());
     },
     () => {
-      setStartStatus("Could not use your location. Add a hotel or area instead.", true);
+      setStartStatus("Could not use your location. Add a neighbourhood, station, or hotel instead.", true);
     },
     { enableHighAccuracy: true, timeout: 9000, maximumAge: 120000 },
   );
@@ -2142,12 +2910,15 @@ function setStartPoint(point) {
   startLatInput.value = roundCoord(point.lat);
   startLngInput.value = roundCoord(point.lng);
   startLabelInput.value = point.name;
+  clearStartSuggestions();
   setStartStatus(`Starting from ${point.name}.`);
+  updateStepMeter();
 }
 
 function clearStartPoint() {
   clearStartCoords();
   setStartStatus("");
+  updateStepMeter();
 }
 
 function clearStartCoords() {
@@ -2160,6 +2931,65 @@ function setStartStatus(message, isCaution = false) {
   startStatus.hidden = !message;
   startStatus.textContent = message;
   startStatus.classList.toggle("is-caution", Boolean(isCaution));
+}
+
+function parseOpeningHours(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  if (text === "24/7") return allDays([[0, 24]]);
+
+  const parsed = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  let matched = false;
+
+  text.split(";").forEach((segment) => {
+    const rule = segment.trim();
+    if (!rule || /\boff\b|\bclosed\b/i.test(rule)) return;
+
+    const timeRanges = Array.from(rule.matchAll(/(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/g));
+    if (!timeRanges.length) return;
+
+    const dayBits = Array.from(rule.matchAll(/\b(Mo|Tu|We|Th|Fr|Sa|Su)(?:-(Mo|Tu|We|Th|Fr|Sa|Su))?\b/g));
+    const days = dayBits.length ? expandOpeningDays(dayBits) : [0, 1, 2, 3, 4, 5, 6];
+
+    timeRanges.forEach((range) => {
+      let open = Number(range[1]) + Number(range[2]) / 60;
+      let close = Number(range[3]) + Number(range[4]) / 60;
+      if (close <= open) close += 24;
+      days.forEach((day) => parsed[day].push([open, close]));
+      matched = true;
+    });
+  });
+
+  return matched ? parsed : null;
+}
+
+function expandOpeningDays(matches) {
+  const map = { Su: 0, Mo: 1, Tu: 2, We: 3, Th: 4, Fr: 5, Sa: 6 };
+  const out = new Set();
+
+  matches.forEach((match) => {
+    const start = map[match[1]];
+    const end = match[2] ? map[match[2]] : start;
+    if (start === undefined || end === undefined) return;
+    out.add(start);
+    let current = start;
+    while (current !== end) {
+      current = (current + 1) % 7;
+      out.add(current);
+    }
+  });
+
+  return Array.from(out);
+}
+
+function defaultHoursForTags(tags) {
+  if (tags.includes("late-night")) return allDays([[18, 27]], { 5: [[17, 29]], 6: [[17, 29]] });
+  if (tags.includes("cocktails")) return allDays([[17, 25]], { 5: [[17, 27]], 6: [[17, 27]] });
+  if (tags.includes("live-music")) return allDays([[18, 26]], { 5: [[18, 28]], 6: [[18, 28]] });
+  if (tags.includes("craft-beer")) return allDays([[14, 24]], { 5: [[13, 26]], 6: [[13, 26]] });
+  if (tags.includes("games")) return allDays([[14, 24]], { 5: [[12, 26]], 6: [[12, 26]] });
+  if (tags.includes("terrace") || tags.includes("food")) return allDays([[12, 24]], { 5: [[11, 25]], 6: [[11, 25]] });
+  return allDays([[16, 24]], { 5: [[15, 26]], 6: [[15, 26]] });
 }
 
 function readExcludedBars(value) {
@@ -2190,7 +3020,7 @@ function setRouteRemovals(names) {
 }
 
 function validVenueName(name) {
-  return venues.find((venue) => venue.name === name)?.name || "";
+  return activeVenues.find((venue) => venue.name === name)?.name || "";
 }
 
 async function copyToClipboard(value) {
@@ -2377,22 +3207,29 @@ function toRad(value) {
   return (value * Math.PI) / 180;
 }
 
-function buildDirectionsUrl(route, startPoint = null) {
+function buildDirectionsUrl(route, startPoint = null, loopToStart = false) {
   if (route.length < 2) {
     if (startPoint && route[0]) {
       const params = new URLSearchParams({
         api: "1",
         travelmode: "walking",
         origin: mapsPoint(startPoint),
-        destination: route[0].address,
+        destination: loopToStart ? mapsPoint(startPoint) : route[0].address,
       });
+      if (loopToStart) params.set("waypoints", route[0].address);
       return `https://www.google.com/maps/dir/?${params.toString()}`;
     }
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(route[0]?.address || "Amsterdam bars")}`;
   }
   const origin = startPoint ? mapsPoint(startPoint) : route[0].address;
-  const destination = route[route.length - 1].address;
-  const waypoints = (startPoint ? route.slice(0, -1) : route.slice(1, -1)).map((venue) => venue.address).join("|");
+  const destination = loopToStart && startPoint ? mapsPoint(startPoint) : route[route.length - 1].address;
+  const waypoints = (
+    loopToStart && startPoint
+      ? route
+      : startPoint
+        ? route.slice(0, -1)
+        : route.slice(1, -1)
+  ).map((venue) => venue.address).join("|");
   const params = new URLSearchParams({
     api: "1",
     travelmode: "walking",

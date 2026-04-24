@@ -27,168 +27,230 @@
             <div>
               <h2>So, what's the idea?</h2>
             </div>
-            <span class="city-pill">Amsterdam</span>
           </div>
 
-          <div class="question-grid">
-            <label class="field">
-              <span>Group size</span>
-              <input id="group-size" name="groupSize" type="number" min="1" max="16" value="4" inputmode="numeric" />
-            </label>
-
-            <label class="field">
-              <span>Start time</span>
-              <input id="start-time" name="startTime" type="time" value="19:30" />
-            </label>
-
-            <label class="field">
-              <span>Date</span>
-              <input id="crawl-date" name="crawlDate" type="date" />
-            </label>
-
-            <label class="field">
-              <span>How long?</span>
-              <select id="duration" name="duration">
-                <option value="3">3 hours</option>
-                <option value="4" selected>4 hours</option>
-                <option value="5">5 hours</option>
-                <option value="6">6 hours</option>
-                <option value="all-night">All night long, baby!</option>
-              </select>
-            </label>
+          <div class="step-meter" aria-label="Planner steps">
+            <button class="step-chip is-active" type="button" data-step-jump="0">
+              <span class="step-chip-number">1</span>
+              <small>Start</small>
+            </button>
+            <button class="step-chip" type="button" data-step-jump="1">
+              <span class="step-chip-number">2</span>
+              <small>Group</small>
+            </button>
+            <button class="step-chip" type="button" data-step-jump="2">
+              <span class="step-chip-number">3</span>
+              <small>Vibe</small>
+            </button>
+            <button class="step-chip" type="button" data-step-jump="3">
+              <span class="step-chip-number">4</span>
+              <small>When</small>
+            </button>
+            <button class="step-chip" type="button" data-step-jump="4">
+              <span class="step-chip-number">5</span>
+              <small>Tune</small>
+            </button>
           </div>
 
-          <fieldset class="choice-set">
-            <legend>Group mood</legend>
-            <div class="segmented" data-single-choice="groupMood">
-              <label><input type="radio" name="groupMood" value="friends" checked /> Friends</label>
-              <label><input type="radio" name="groupMood" value="date" /> Date night</label>
-              <label><input type="radio" name="groupMood" value="work" /> Work crew</label>
-              <label><input type="radio" name="groupMood" value="visitors" /> Visitors</label>
-            </div>
-          </fieldset>
+          <section class="form-step is-active" data-step="0" aria-labelledby="step-start-title">
+            <p class="step-count">Step 1 of 5</p>
+            <h3 id="step-start-title">Where should the crawl begin?</h3>
+            <p class="step-copy">Pick a hotel, station, neighbourhood, or area. We will search for bars within 1 km.</p>
 
-          <fieldset class="choice-set">
-            <legend>What sounds good?</legend>
-            <div class="chips">
-              <label><input type="checkbox" name="vibe" value="cocktails" checked /> Cocktails</label>
-              <label><input type="checkbox" name="vibe" value="wine" /> Wine</label>
-              <label><input type="checkbox" name="vibe" value="craft-beer" /> Craft beer</label>
-              <label><input type="checkbox" name="vibe" value="chill-beers" /> Chill beers</label>
-              <label><input type="checkbox" name="vibe" value="live-music" /> Live music</label>
-              <label><input type="checkbox" name="vibe" value="terrace" /> Terrace</label>
-              <label><input type="checkbox" name="vibe" value="hidden" /> Hidden gems</label>
-              <label><input type="checkbox" name="vibe" value="late-night" /> Late night</label>
-              <label><input type="checkbox" name="vibe" value="games" /> Games</label>
-            </div>
-          </fieldset>
-
-          <fieldset class="choice-set">
-            <legend>Start from here</legend>
-            <div class="start-location-row">
-              <label class="field">
-                <span>Hotel, house, station, or area</span>
-                <input id="start-location" name="startLocation" type="search" placeholder="e.g. Hotel Jakarta, Jordaan, Amsterdam Centraal" autocomplete="street-address" />
-              </label>
-              <div class="start-tools">
-                <button id="find-start" class="secondary-action" type="button">Find start</button>
-                <button id="use-current-location" class="secondary-action" type="button">Use my location</button>
+            <fieldset class="choice-set">
+              <legend class="sr-only">Start from here</legend>
+              <div class="start-location-row">
+                <label class="field">
+                  <span>Start from here</span>
+                  <input id="start-location" name="startLocation" type="search" placeholder="e.g. De Pijp, Soho, Amsterdam Centraal" autocomplete="street-address" />
+                </label>
+                <div class="start-tools">
+                  <button id="find-start" class="secondary-action" type="button">Find start</button>
+                  <button id="use-current-location" class="secondary-action" type="button">Use my location</button>
+                </div>
               </div>
-            </div>
-            <p id="start-status" class="start-status" hidden></p>
-            <p class="helper-text">Routes can start from an address, a hotel, your current spot, or a neighbourhood.</p>
-            <input id="start-lat" name="startLat" type="hidden" value="" />
-            <input id="start-lng" name="startLng" type="hidden" value="" />
-            <input id="start-label" name="startLabel" type="hidden" value="" />
-          </fieldset>
+              <div id="start-suggestions" class="start-suggestions" role="listbox" aria-label="Starting area suggestions" hidden></div>
+              <p id="start-status" class="start-status" hidden></p>
+              <label class="toggle-row">
+                <input id="loop-to-start" name="loopToStart" type="checkbox" />
+                <span>Loop to start</span>
+              </label>
+              <input id="start-lat" name="startLat" type="hidden" value="" />
+              <input id="start-lng" name="startLng" type="hidden" value="" />
+              <input id="start-label" name="startLabel" type="hidden" value="" />
+            </fieldset>
+          </section>
 
-          <div class="question-grid">
-            <label class="field">
-              <span>Preferred area</span>
-              <select id="area" name="area">
-                <option value="any" selected>Best fit</option>
-                <option value="Centrum">Centrum</option>
-                <option value="Jordaan">Jordaan</option>
-                <option value="Leidseplein">Leidseplein</option>
-                <option value="De Pijp">De Pijp</option>
-                <option value="Oud-West">Oud-West</option>
-                <option value="Westerpark">Westerpark</option>
-                <option value="Noord">Noord</option>
-                <option value="Oost">Oost</option>
-              </select>
-            </label>
+          <section class="form-step" data-step="1" aria-labelledby="step-group-title" hidden>
+            <p class="step-count">Step 2 of 5</p>
+            <h3 id="step-group-title">Who is this night for?</h3>
+            <p class="step-copy">Give the planner the social shape of the group.</p>
 
-            <label class="field">
-              <span>Budget</span>
-              <select id="budget" name="budget">
-                <option value="low">Easy-going</option>
-                <option value="medium" selected>Mixed</option>
-                <option value="high">Treat night</option>
-              </select>
-            </label>
+            <fieldset class="choice-set">
+              <legend>Group mood</legend>
+              <div class="segmented" data-single-choice="groupMood">
+                <label><input type="radio" name="groupMood" value="friends" checked /> Friends</label>
+                <label><input type="radio" name="groupMood" value="date" /> Date night</label>
+                <label><input type="radio" name="groupMood" value="work" /> Work crew</label>
+                <label><input type="radio" name="groupMood" value="visitors" /> Visitors</label>
+              </div>
+            </fieldset>
 
-            <label class="field">
-              <span>Pace</span>
-              <select id="pace" name="pace">
-                <option value="relaxed">Relaxed</option>
-                <option value="balanced" selected>Balanced</option>
-                <option value="lively">Lively</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Walking limit</span>
-              <select id="walk-limit" name="walkLimit">
-                <option value="600">Short hops</option>
-                <option value="1000" selected>Normal</option>
-                <option value="1600">Happy to wander</option>
-              </select>
-            </label>
-          </div>
-
-          <fieldset class="choice-set">
-            <legend>Include this bar</legend>
             <div class="question-grid">
               <label class="field">
-                <span>Bar to include</span>
-                <select id="include-bar" name="includeBar">
-                  <option value="">No specific bar</option>
+                <span>Group size</span>
+                <input id="group-size" name="groupSize" type="number" min="1" max="16" value="4" inputmode="numeric" />
+              </label>
+            </div>
+          </section>
+
+          <section class="form-step" data-step="2" aria-labelledby="step-vibe-title" hidden>
+            <p class="step-count">Step 3 of 5</p>
+            <h3 id="step-vibe-title">What sounds good?</h3>
+            <p class="step-copy">Pick the energy you want the route to chase.</p>
+
+            <fieldset class="choice-set">
+              <legend class="sr-only">What sounds good?</legend>
+              <div class="chips">
+                <label><input type="checkbox" name="vibe" value="cocktails" checked /> Cocktails</label>
+                <label><input type="checkbox" name="vibe" value="wine" /> Wine</label>
+                <label><input type="checkbox" name="vibe" value="craft-beer" /> Craft beer</label>
+                <label><input type="checkbox" name="vibe" value="chill-beers" /> Chill beers</label>
+                <label><input type="checkbox" name="vibe" value="live-music" /> Live music</label>
+                <label><input type="checkbox" name="vibe" value="terrace" /> Terrace</label>
+                <label><input type="checkbox" name="vibe" value="hidden" /> Hidden gems</label>
+                <label><input type="checkbox" name="vibe" value="late-night" /> Late night</label>
+                <label><input type="checkbox" name="vibe" value="games" /> Games</label>
+              </div>
+            </fieldset>
+          </section>
+
+          <section class="form-step" data-step="3" aria-labelledby="step-time-title" hidden>
+            <p class="step-count">Step 4 of 5</p>
+            <h3 id="step-time-title">When are we doing this?</h3>
+            <p class="step-copy">Set the runway, then the route can pace itself properly.</p>
+
+            <div class="question-grid">
+              <label class="field">
+                <span>Start time</span>
+                <input id="start-time" name="startTime" type="time" value="19:30" />
+              </label>
+
+              <label class="field">
+                <span>Date</span>
+                <input id="crawl-date" name="crawlDate" type="date" />
+              </label>
+
+              <label class="field">
+                <span>How long?</span>
+                <select id="duration" name="duration">
+                  <option value="3">3 hours</option>
+                  <option value="4" selected>4 hours</option>
+                  <option value="5">5 hours</option>
+                  <option value="6">6 hours</option>
+                  <option value="all-night">All night long, baby!</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-step" data-step="4" aria-labelledby="step-tune-title" hidden>
+            <p class="step-count">Step 5 of 5</p>
+            <h3 id="step-tune-title">Tune the crawl</h3>
+            <p class="step-copy">These are the dials that shape the route once the basics are set.</p>
+
+            <div class="question-grid">
+              <label class="field">
+                <span>Budget</span>
+                <select id="budget" name="budget">
+                  <option value="low">Easy-going</option>
+                  <option value="medium" selected>Mixed</option>
+                  <option value="high">Treat night</option>
                 </select>
               </label>
 
               <label class="field">
-                <span>Where should it go?</span>
-                <select id="include-mode" name="includeMode">
-                  <option value="start">Start there</option>
-                  <option value="mix">Somewhere in the mix</option>
+                <span>Pace</span>
+                <select id="pace" name="pace">
+                  <option value="relaxed">Relaxed</option>
+                  <option value="balanced" selected>Balanced</option>
+                  <option value="lively">Lively</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Walking limit</span>
+                <select id="walk-limit" name="walkLimit">
+                  <option value="600">Short hops</option>
+                  <option value="1000" selected>Normal</option>
+                  <option value="1600">Happy to wander</option>
                 </select>
               </label>
             </div>
-            <p class="helper-text">Pick a must-have stop, replace bars you do not fancy, or remove stops to make the night shorter.</p>
-            <input id="excluded-bars" name="excludedBars" type="hidden" value="" />
-            <input id="removed-bars" name="removedBars" type="hidden" value="" />
-          </fieldset>
 
-          <label class="toggle-row">
-            <input id="reservations" name="reservations" type="checkbox" checked />
-            <span>Flag places where booking or small-group caution matters</span>
-          </label>
+            <div class="extra-stack">
+              <label class="toggle-row">
+                <input id="reservations" name="reservations" type="checkbox" checked />
+                <span>Flag places where booking or small-group caution matters</span>
+              </label>
 
-          <fieldset class="choice-set">
-            <legend>Do you want to add challenges?</legend>
-            <div class="segmented" data-single-choice="challenges">
-              <label><input type="radio" name="challenges" value="no" checked /> No</label>
-              <label><input type="radio" name="challenges" value="yes" /> Yes</label>
+              <fieldset class="choice-set">
+                <legend>Do you want to add challenges?</legend>
+                <div class="segmented" data-single-choice="challenges">
+                  <label><input type="radio" name="challenges" value="no" checked /> No</label>
+                  <label><input type="radio" name="challenges" value="yes" /> Yes</label>
+                </div>
+                <p class="helper-text">Tiny stop-by-stop dares matched to what each place is known for.</p>
+              </fieldset>
+
+              <details class="advanced-panel">
+                <summary>Pin a stop</summary>
+                <div class="question-grid">
+                  <label class="field">
+                    <span>Bar to include</span>
+                    <select id="include-bar" name="includeBar">
+                      <option value="">No specific bar</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Where should it go?</span>
+                    <select id="include-mode" name="includeMode">
+                      <option value="start">Start there</option>
+                      <option value="mix">Somewhere in the mix</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="helper-text">Pick a must-have stop, replace bars you do not fancy, or remove stops to make the night shorter.</p>
+              </details>
             </div>
-            <p class="helper-text">Tiny stop-by-stop dares matched to what each place is known for.</p>
-          </fieldset>
+          </section>
 
-          <button class="primary-action" type="submit">Build my crawl</button>
+          <input id="area-value" name="area" type="hidden" value="any" />
+          <input id="excluded-bars" name="excludedBars" type="hidden" value="" />
+          <input id="removed-bars" name="removedBars" type="hidden" value="" />
+
+          <div class="step-actions">
+            <button id="step-back" class="ghost-action" type="button" hidden>Back</button>
+            <div class="step-actions-right">
+              <button id="step-next" class="secondary-action progress-action" type="button">Next</button>
+              <button id="build-crawl" class="primary-action progress-action" type="submit" hidden>Build my crawl</button>
+            </div>
+          </div>
         </form>
 
         <aside class="result-panel" aria-live="polite" aria-label="Generated itinerary">
           <div id="empty-state" class="empty-state">
             <h2><span class="emoji-panel" aria-hidden="true">🍺 🎯 🗺️</span> Your night will appear here</h2>
+          </div>
+
+          <div id="loading-state" class="loading-state" hidden>
+            <div class="loading-spinner" aria-hidden="true">
+              <span>🍺</span>
+              <span>🍺</span>
+            </div>
+            <h2>Pulling the first round together</h2>
+            <p id="loading-pun" class="loading-pun">We are lining up a route with good pours and bad decisions.</p>
           </div>
 
           <div id="results" class="results" hidden></div>
@@ -197,7 +259,7 @@
 
       <section class="source-strip" aria-label="Venue notes">
         <p>
-          Venue details are seeded from public venue pages and Amsterdam guides, then simplified for planning. Always check the live venue page before heading out.
+          Venue details come from live place data or the local seed list, then get simplified for planning. Always check the live venue page before heading out.
         </p>
         <button id="open-source-dialog" class="secondary-action" type="button">View bars</button>
       </section>
@@ -208,12 +270,12 @@
         <div class="source-dialog-header">
           <div>
             <p class="eyebrow">Bar list</p>
-            <h2 id="source-dialog-title">Bars BarCrawlr checks</h2>
+            <h2 id="source-dialog-title">Bars BarCrawlr found</h2>
           </div>
           <button id="close-source-dialog" class="text-action" type="button">Close</button>
         </div>
         <p class="source-dialog-copy">
-          These are the places currently in the Amsterdam planner. Open a venue page before heading out, because hours and bookings can change.
+          These are the places currently in the planner around the chosen start point. Open a venue page before heading out, because hours and bookings can change.
         </p>
         <div id="source-links" class="source-links source-links-popup"></div>
       </div>
